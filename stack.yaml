@@ -1,0 +1,7 @@
+resolver: lts-13.28
+extra-deps:
+- http-download-0.1.0.0
+- pantry-0.1.1.0
+- rio-prettyprint-0.1.0.0
+- ansi-terminal-0.9.1
+- rio-0.1.10.0
