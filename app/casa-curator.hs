@@ -70,6 +70,26 @@ populateConfigParser =
     (strOption
        (long "snapshot" <> metavar "SNAPSHOT" <>
         help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
+  downloadConcurrencyParser
+
+data ContinuousPopulatePushConfig =
+  ContinuousPopulatePushConfig
+    { continuousPopulatePushConfigSleepFor :: Int
+    , continuousPopulatePushConfigConcurrentDownloads :: Int
+    }
+
+continuousPopulatePushConfig :: Parser ContinuousPopulatePushConfig
+continuousPopulatePushConfig =
+  ContinuousPopulatePushConfig <$>
+  option
+    auto
+    (long "sleep-for" <>
+     help "Sleep for at least n minutes between polling" <>
+     metavar "INT") <*>
+  downloadConcurrencyParser
+
+downloadConcurrencyParser :: Parser Int
+downloadConcurrencyParser =
   option
     auto
     (long "download-concurrency" <>
@@ -85,14 +105,23 @@ main = do
       "casa-curator"
       "casa-curator"
       (pure ())
-      (do addCommand "push" "Push all blobs" pushCommand pushConfigParser
-          addCommand "status" "Give some stats" (const statusCommand) (pure ())
+      (do addCommand "push" "Push ALL blobs to Casa" pushCommand pushConfigParser
+          addCommand "status" "Give some stats about the pantry database" (const statusCommand) (pure ())
           addCommand
             "populate"
-            "Populate the pantry database"
+            "Populate the pantry database with blobs from a given snapshot"
             populateCommand
-            populateConfigParser)
+            populateConfigParser
+          addCommand
+            "continuous-populate-push"
+            "Poll stackage for new snapshots, \"populate\" then \"push\", repeatedly"
+            continuousPopulatePushCommand
+            continuousPopulatePushConfig)
   runCmd
+
+continuousPopulatePushCommand :: ContinuousPopulatePushConfig -> IO ()
+continuousPopulatePushCommand continuousPopulatePushConfig =
+  pure ()
 
 statusCommand :: IO ()
 statusCommand =
