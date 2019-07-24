@@ -112,7 +112,8 @@ populateCommand populateConfig =
              logSticky
                ("Loading package: " <> display i <> "/" <> display total <> ": " <>
                 display rawPackageLocationImmutable)
-             loadPackageRaw rawPackageLocationImmutable))
+             loadPackageRaw rawPackageLocationImmutable)
+        logStickyDone ("Loaded all " <> display total <> " packages."))
 
 -- | Start pushing.
 pushCommand :: MonadIO m => PushConfig -> m ()
