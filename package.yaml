@@ -61,3 +61,6 @@ executables:
       - text
       - optparse-simple
       - containers
+      - aeson
+      - http-conduit
+      - syb
