@@ -10,6 +10,7 @@ import Control.Lens.TH
 import Control.Monad.Trans.Resource
 import Data.Conduit
 import Options.Applicative
+import Options.Applicative.Simple
 import Pantry
 import Pantry.Internal.Stackage
 import RIO
@@ -27,33 +28,38 @@ $(makeLenses ''CasaPush)
 instance HasLogFunc CasaPush where logFuncL = casaPushPantry . logFuncL
 instance HasResourceMap CasaPush where resourceMapL = casaPushResourceMap
 
-data Config =
-  Config
+data PushConfig =
+  PushConfig
     { configCasaUrl :: String
     }
   deriving (Show)
 
 -- | Command-line config.
-configParser :: Parser Config
-configParser =
-  Config <$>
+pushConfigParser :: Parser PushConfig
+pushConfigParser =
+  PushConfig <$>
   strOption (long "push-url" <> metavar "URL" <> help "Casa push URL")
 
 -- | Main entry point.
 main :: IO ()
 main = do
-  config <- execParser opts
-  start config
-  where
-    opts =
-      info
-        (configParser <**> helper)
-        (fullDesc <> progDesc "Run a program as a daemon with cron" <>
-         header "cron-daemon - Run a program as a daemon with cron")
+  ((), runCmd) <-
+    simpleOptions
+      "0"
+      "casa-curator"
+      "casa-curator"
+      (pure ())
+      (do addCommand "push" "Push all blobs" pushCommand pushConfigParser
+          addCommand
+            "populate"
+            "Populate the pantry database"
+            (const (pure ()))
+            (pure ()))
+  runCmd
 
 -- | Start pushing.
-start :: MonadIO m => Config -> m ()
-start config =
+pushCommand :: MonadIO m => PushConfig -> m ()
+pushCommand config =
   runPantryApp
     (do pantryApp <- ask
         storage <- fmap (pcStorage . view pantryConfigL) ask
