@@ -59,3 +59,4 @@ executables:
       - resourcet
       - optparse-applicative
       - text
+      - optparse-simple
