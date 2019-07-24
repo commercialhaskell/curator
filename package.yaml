@@ -46,8 +46,8 @@ executables:
     - curator
     - http-download
     - optparse-simple
-  casa-push:
-    main: casa-push.hs
+  casa-curator:
+    main: casa-curator.hs
     source-dirs: app
     dependencies:
       - curator
@@ -58,3 +58,4 @@ executables:
       - lens
       - resourcet
       - optparse-applicative
+      - text
