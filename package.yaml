@@ -60,3 +60,4 @@ executables:
       - optparse-applicative
       - text
       - optparse-simple
+      - containers
