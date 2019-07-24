@@ -1,3 +1,17 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -9,6 +23,8 @@ module Main where
 
 import           Casa.Client
 import           Control.Lens.TH
+import           Control.Monad
+import           Control.Monad.Logger (NoLoggingT)
 import           Control.Monad.Trans.Resource
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Parser
@@ -22,15 +38,28 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as T
+import           Data.Time
+import           Database.Persist
+import           Database.Persist.Sqlite
+import           Database.Persist.TH
 import           Network.HTTP.Simple
 import           Options.Applicative
 import           Options.Applicative.Simple
 import           Pantry
-import           Pantry.Internal.Stackage
+import           Pantry.Internal.Stackage hiding (migrateAll)
 import           RIO
 import           RIO.Orphans
 import           RIO.Process
 import           System.Environment
+
+share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+LastPushed
+  blobId BlobId
+SnapshotLoaded
+  name Text
+  timestamp UTCTime default=now()
+  Unique SnapshotLoadedNameUnique name
+|]
 
 data CasaPush =
   CasaPush
@@ -75,7 +104,8 @@ populateConfigParser =
 data ContinuousPopulatePushConfig =
   ContinuousPopulatePushConfig
     { continuousPopulatePushConfigSleepFor :: Int
-    , continuousPopulatePushConfigConcurrentDownloads :: Int
+    , continuousPopulatePushConfigSqliteFile :: Text
+    , continuousPopulatePushConfigPopulateConfig :: PopulateConfig
     }
 
 continuousPopulatePushConfig :: Parser ContinuousPopulatePushConfig
@@ -83,10 +113,14 @@ continuousPopulatePushConfig =
   ContinuousPopulatePushConfig <$>
   option
     auto
-    (long "sleep-for" <>
-     help "Sleep for at least n minutes between polling" <>
+    (long "sleep-for" <> help "Sleep for at least n minutes between polling" <>
      metavar "INT") <*>
-  downloadConcurrencyParser
+  fmap
+    T.pack
+    (strOption
+       (long "sqlite-file" <> help "Filepath to use for sqlite database" <>
+        metavar "PATH")) <*>
+  populateConfigParser
 
 downloadConcurrencyParser :: Parser Int
 downloadConcurrencyParser =
@@ -120,8 +154,51 @@ main = do
   runCmd
 
 continuousPopulatePushCommand :: ContinuousPopulatePushConfig -> IO ()
-continuousPopulatePushCommand continuousPopulatePushConfig =
-  pure ()
+continuousPopulatePushCommand continuousPopulatePushConfig = do
+  runSqlite
+    (continuousPopulatePushConfigSqliteFile continuousPopulatePushConfig)
+    (runMigration migrateAll)
+  runPantryApp
+    (forever
+       (do runSqlite
+             (continuousPopulatePushConfigSqliteFile
+                continuousPopulatePushConfig)
+             pullAndPush
+           delay))
+  where
+    delay =
+      threadDelay
+        (1000 * 60 *
+         (continuousPopulatePushConfigSleepFor continuousPopulatePushConfig))
+    pullAndPush = do
+      availableNames <- liftIO downloadAllSnapshotTextNames
+      loadedSnapshots :: [Entity SnapshotLoaded] <-
+        selectList [] [] :: ReaderT SqlBackend (NoLoggingT (ResourceT (RIO env))) [Entity SnapshotLoaded]
+      let loadedNames =
+            Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
+          newNames = Set.difference availableNames loadedNames
+          liftRIO = lift . lift . lift
+      liftRIO
+        (for_
+           newNames
+           (\snapshotTextName -> do
+              let unresoledRawSnapshotLocation =
+                    parseRawSnapshotLocation snapshotTextName
+              rawSnapshot <-
+                loadSnapshotByUnresolvedSnapshotLocation
+                  unresoledRawSnapshotLocation
+              populateFromRawSnapshot
+                (populateConfigConcurrentDownloads
+                   (continuousPopulatePushConfigPopulateConfig
+                      continuousPopulatePushConfig))
+                rawSnapshot))
+      for_
+        newNames
+        (\name -> do
+           now <- liftIO getCurrentTime
+           insert_
+             (SnapshotLoaded
+                {snapshotLoadedName = name, snapshotLoadedTimestamp = now}))
 
 statusCommand :: IO ()
 statusCommand =
