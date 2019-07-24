@@ -58,6 +58,7 @@ pushConfigParser =
 data PopulateConfig =
   PopulateConfig
     { populateConfigSnapshot :: Unresolved RawSnapshotLocation
+    , populateConfigConcurrentDownloads :: Int
     }
 
 -- | Command-line config.
@@ -68,7 +69,12 @@ populateConfigParser =
     (parseRawSnapshotLocation . T.pack)
     (strOption
        (long "snapshot" <> metavar "SNAPSHOT" <>
-        help "Snapshot in usual Stack format (lts-1.1, nightly-...)"))
+        help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
+  option
+    auto
+    (long "download-concurrency" <>
+     help "How many package downloads to do at once" <>
+     metavar "INT")
 
 -- | Main entry point.
 main :: IO ()
@@ -110,7 +116,9 @@ populateCommand populateConfig =
   runPantryApp
     (do rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
-        populateFromRawSnapshot rawSnapshot)
+        populateFromRawSnapshot
+          (populateConfigConcurrentDownloads populateConfig)
+          rawSnapshot)
   where
     unresoledRawSnapshotLocation = populateConfigSnapshot populateConfig
 
@@ -196,11 +204,13 @@ snapshotsParser j = do
 -- | Populate the database with packages from a raw snapshot.
 populateFromRawSnapshot ::
      (HasLogFunc env, HasPantryConfig env, HasProcessContext env)
-  => RawSnapshot
+  => Int
+  -> RawSnapshot
   -> RIO env ()
-populateFromRawSnapshot rawSnapshot = do
+populateFromRawSnapshot concurrentDownloads rawSnapshot = do
   let total = length (rsPackages rawSnapshot)
-  for_
+  pooledForConcurrentlyN_
+    concurrentDownloads
     (zip [0 :: Int ..] (map rspLocation (M.elems (rsPackages rawSnapshot))))
     (\(i, rawPackageLocationImmutable) -> do
        logSticky

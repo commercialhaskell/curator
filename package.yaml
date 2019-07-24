@@ -47,6 +47,7 @@ executables:
     - http-download
     - optparse-simple
   casa-curator:
+    ghc-options: -threaded
     main: casa-curator.hs
     source-dirs: app
     dependencies:
