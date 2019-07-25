@@ -204,6 +204,7 @@ continuousPopulatePushCommand continuousConfig = do
                     Set.fromList
                       (map (snapshotLoadedName . entityVal) loadedSnapshots)
                   newNames = Set.difference availableNames loadedNames
+              logInfo ("There are " <> display (length newNames) <> " new snapshots.")
               pure newNames)
       for_ newNames (populateViaSnapshotTextName continuousConfig)
       runSimpleApp
