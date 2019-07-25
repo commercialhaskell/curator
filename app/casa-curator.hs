@@ -189,7 +189,7 @@ continuousPopulatePushCommand continuousConfig = do
         delay)
   where
     delay =
-      threadDelay (1000 * 60 * (continuousConfigSleepFor continuousConfig))
+      threadDelay (1000 * * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
       newNames <-
         runSimpleApp
