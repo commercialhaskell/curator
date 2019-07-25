@@ -204,15 +204,16 @@ continuousPopulatePushCommand continuousConfig = do
                     Set.fromList
                       (map (snapshotLoadedName . entityVal) loadedSnapshots)
                   newNames = Set.difference availableNames loadedNames
-              logInfo ("There are " <> display (length newNames) <> " new snapshots.")
+              logInfo
+                ("There are " <> display (length newNames) <> " new snapshots.")
               pure newNames)
-      for_ newNames (populateViaSnapshotTextName continuousConfig)
-      runSimpleApp
-        (do logSticky "Recording populated snapshots ..."
-            withContinuousProcessDb
-              (continuousConfigSqliteFile continuousConfig)
-              (for_ newNames insertLoadedSnapshot)
-            logStickyDone "Recorded populated snapshots.")
+      for_
+        newNames
+        (\name -> do
+           populateViaSnapshotTextName continuousConfig name
+           withContinuousProcessDb
+             (continuousConfigSqliteFile continuousConfig)
+             (insertLoadedSnapshot name))
       pushCommand
         PushConfig
           { configCasaUrl = continuousConfigPushUrl continuousConfig
