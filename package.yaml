@@ -68,3 +68,4 @@ executables:
       - persistent-sqlite
       - persistent-template
       - time
+      - monad-logger

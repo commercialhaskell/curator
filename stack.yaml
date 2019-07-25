@@ -14,10 +14,10 @@ extra-deps:
 - rio-0.1.10.0
 
 #- pantry-0.1.1.0
-- git: https://github.com/commercialhaskell/pantry.git
+- github: commercialhaskell/pantry
   commit: 6afcace795c1218f7a49b1ceb6a137cf31333bcf
 
-- git: https://github.com/fpco/casa.git
+- github: fpco/casa
   commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
   subdirs:
      - casa-client

@@ -33,51 +33,51 @@ packages:
   original:
     hackage: rio-0.1.10.0
 - completed:
+    size: 89193
+    url: https://github.com/commercialhaskell/pantry/archive/6afcace795c1218f7a49b1ceb6a137cf31333bcf.tar.gz
     cabal-file:
       size: 4651
       sha256: 62e2435879a4cef30e7f945e047b3704cdd497fefe821e5eef358feefd374656
     name: pantry
     version: 0.1.1.0
-    git: https://github.com/commercialhaskell/pantry.git
+    sha256: 88c30317f88f476dea17e9de68d3a828ac2a0a24d95139fb0d8ec6ef2313957f
     pantry-tree:
       size: 3369
       sha256: 4d9494e7a924421a2013307546f88d31c87931fd6b4dc5b490687da8ef129d19
-    commit: 6afcace795c1218f7a49b1ceb6a137cf31333bcf
   original:
-    git: https://github.com/commercialhaskell/pantry.git
-    commit: 6afcace795c1218f7a49b1ceb6a137cf31333bcf
+    url: https://github.com/commercialhaskell/pantry/archive/6afcace795c1218f7a49b1ceb6a137cf31333bcf.tar.gz
 - completed:
+    size: 8744
     subdir: casa-client
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
     cabal-file:
       size: 512
       sha256: 8d7ed9a87422ac784486aa5eb634fda93382fe5260a4a0c63e2b17abc3c5cd18
     name: casa-client
     version: 0.0.0
-    git: https://github.com/fpco/casa.git
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
     pantry-tree:
       size: 120
       sha256: c30e67a87669d29151142df5569c704e04b23fc0557dfe8d85b214b991aa7940
-    commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
   original:
     subdir: casa-client
-    git: https://github.com/fpco/casa.git
-    commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
 - completed:
+    size: 8744
     subdir: casa-types
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
     cabal-file:
       size: 404
       sha256: 9a9bc4febca2c369a93c8180f966483359cc9a8a6590021d542a73f9c6e7bcb4
     name: casa-types
     version: 0.0.0
-    git: https://github.com/fpco/casa.git
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
     pantry-tree:
       size: 177
       sha256: 38bb767ea4f390e1faee24e66bffef4a2eea3a0ff3e011a74679f7252146936e
-    commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
   original:
     subdir: casa-types
-    git: https://github.com/fpco/casa.git
-    commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
 snapshots:
 - completed:
     size: 500539
