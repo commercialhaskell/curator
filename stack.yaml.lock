@@ -33,21 +33,21 @@ packages:
   original:
     hackage: rio-0.1.10.0
 - completed:
-    size: 89268
-    url: https://github.com/commercialhaskell/pantry/archive/3cddc2bb799bf475979b0743f56623ea3b8732a1.tar.gz
+    size: 89264
+    url: https://github.com/commercialhaskell/pantry/archive/6c8877ead858186623df2af77d4878aa5792601e.tar.gz
     cabal-file:
       size: 4651
       sha256: 62e2435879a4cef30e7f945e047b3704cdd497fefe821e5eef358feefd374656
     name: pantry
     version: 0.1.1.0
-    sha256: b0658a1bf5beb5836e19095128b1fd2be5201a4e094a442764781dc11430dd3e
+    sha256: ac1647b5d30d9f1d5fa476393fe9bdde8c204dcd2faf52290facc90d46bbe2b8
     pantry-tree:
       size: 3369
-      sha256: 1e3531f9cd19177f4816c1d3a5046b8b1677443c199bbdefb12dd54ae598830b
+      sha256: 221d99b626a613cf0d3d28c71d3d4493f721ad2cbd2f811aad28afe0b74afdc0
   original:
-    size: 89268
-    url: https://github.com/commercialhaskell/pantry/archive/3cddc2bb799bf475979b0743f56623ea3b8732a1.tar.gz
-    sha256: b0658a1bf5beb5836e19095128b1fd2be5201a4e094a442764781dc11430dd3e
+    size: 89264
+    url: https://github.com/commercialhaskell/pantry/archive/6c8877ead858186623df2af77d4878aa5792601e.tar.gz
+    sha256: ac1647b5d30d9f1d5fa476393fe9bdde8c204dcd2faf52290facc90d46bbe2b8
 - completed:
     size: 8744
     subdir: casa-client

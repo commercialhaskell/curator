@@ -189,7 +189,8 @@ continuousPopulatePushCommand continuousConfig = do
         delay)
   where
     delay =
-      threadDelay (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
+      threadDelay
+        (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
       newNames <-
         runSimpleApp
@@ -214,11 +215,13 @@ continuousPopulatePushCommand continuousConfig = do
            withContinuousProcessDb
              (continuousConfigSqliteFile continuousConfig)
              (insertLoadedSnapshot name))
-      pushCommand
-        PushConfig
-          { configCasaUrl = continuousConfigPushUrl continuousConfig
-          , configSqliteFile = continuousConfigSqliteFile continuousConfig
-          }
+      unless
+        (null newNames)
+        (pushCommand
+           PushConfig
+             { configCasaUrl = continuousConfigPushUrl continuousConfig
+             , configSqliteFile = continuousConfigSqliteFile continuousConfig
+             })
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
@@ -266,7 +269,7 @@ statusCommand =
                   })
                (withStorage_
                   storage
-                  (do count <- allBlobsCount
+                  (do count <- allBlobsCount Nothing
                       lift (logInfo ("Blobs in database: " <> display count))))))
 
 -- | Populate the pantry database.
@@ -303,14 +306,17 @@ pushCommand config = do
                (withStorage_
                   storage
                   (do count <- allBlobsCount mlastPushedBlobId
-                      blobsSink
-                        (configCasaUrl config)
-                        (allBlobsSource mlastPushedBlobId .|
-                         CL.mapM
-                           (\(blobId, blob) -> do
-                              liftIO (writeIORef mlastBlobIdRef (Just blobId))
-                              pure blob) .|
-                         stickyProgress count)))))
+                      if count > 0
+                        then blobsSink
+                               (configCasaUrl config)
+                               (allBlobsSource mlastPushedBlobId .|
+                                CL.mapM
+                                  (\(blobId, blob) -> do
+                                     liftIO
+                                       (writeIORef mlastBlobIdRef (Just blobId))
+                                     pure blob) .|
+                                stickyProgress count)
+                        else pure ()))))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
   case mlastBlobId of
     Nothing -> pure ()
