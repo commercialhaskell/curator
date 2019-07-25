@@ -60,7 +60,7 @@ LastPushed
   blobId BlobId
 SnapshotLoaded
   name Text
-  timestamp UTCTime default=now()
+  timestamp UTCTime
   Unique SnapshotLoadedNameUnique name
 |]
 
@@ -89,8 +89,12 @@ data PushConfig =
 pushConfigParser :: Parser PushConfig
 pushConfigParser =
   PushConfig <$>
-  strOption (long "push-url" <> metavar "URL" <> help "Casa push URL") <*>
+  pushUrlParser <*>
   sqliteFileParser
+
+pushUrlParser :: Parser String
+pushUrlParser =
+  strOption (long "push-url" <> metavar "URL" <> help "Casa push URL")
 
 data PopulateConfig =
   PopulateConfig
@@ -113,8 +117,8 @@ data ContinuousConfig =
   ContinuousConfig
     { continuousConfigSleepFor :: Int
     , continuousConfigSqliteFile :: Text
-    , continuousConfigPopulateConfig :: PopulateConfig
-    , continuousConfigPushConfig :: PushConfig
+    , continuousConfigConcurrentDownloads :: Int
+    , continuousConfigPushUrl :: String
     }
 
 continuousConfig :: Parser ContinuousConfig
@@ -125,8 +129,8 @@ continuousConfig =
     (long "sleep-for" <> help "Sleep for at least n minutes between polling" <>
      metavar "INT") <*>
   sqliteFileParser <*>
-  populateConfigParser <*>
-  pushConfigParser
+  downloadConcurrencyParser <*>
+  pushUrlParser
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -187,19 +191,32 @@ continuousPopulatePushCommand continuousConfig = do
     delay =
       threadDelay (1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
-      availableNames <- downloadAllSnapshotTextNames
-      loadedSnapshots <-
-        withContinuousProcessDb
-          (continuousConfigSqliteFile continuousConfig)
-          (selectList [] [])
-      let loadedNames =
-            Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
-          newNames = Set.difference availableNames loadedNames
+      newNames <-
+        runSimpleApp
+          (do logSticky "Downloading snapshots from Stackage ..."
+              availableNames <- downloadAllSnapshotTextNames
+              logStickyDone "Downloaded snapshots from Stackage."
+              loadedSnapshots <-
+                withContinuousProcessDb
+                  (continuousConfigSqliteFile continuousConfig)
+                  (selectList [] [])
+              let loadedNames =
+                    Set.fromList
+                      (map (snapshotLoadedName . entityVal) loadedSnapshots)
+                  newNames = Set.difference availableNames loadedNames
+              pure newNames)
       for_ newNames (populateViaSnapshotTextName continuousConfig)
-      withContinuousProcessDb
-        (continuousConfigSqliteFile continuousConfig)
-        (for_ newNames insertLoadedSnapshot)
-      pushCommand (continuousConfigPushConfig continuousConfig)
+      runSimpleApp
+        (do logSticky "Recording populated snapshots ..."
+            withContinuousProcessDb
+              (continuousConfigSqliteFile continuousConfig)
+              (for_ newNames insertLoadedSnapshot)
+            logStickyDone "Recorded populated snapshots.")
+      pushCommand
+        PushConfig
+          { configCasaUrl = continuousConfigPushUrl continuousConfig
+          , configSqliteFile = continuousConfigSqliteFile continuousConfig
+          }
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
@@ -218,19 +235,19 @@ populateViaSnapshotTextName continuousConfig snapshotTextName =
               parseRawSnapshotLocation snapshotTextName
         rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
+        logInfo ("Populating from snapshot " <> display snapshotTextName <> " ...")
         populateFromRawSnapshot
-          (populateConfigConcurrentDownloads
-             (continuousConfigPopulateConfig continuousConfig))
+          (continuousConfigConcurrentDownloads continuousConfig)
           rawSnapshot)
 
 -- | With the database used for the continous process (to remember
 -- what it has done).
 withContinuousProcessDb ::
-     Text
+     MonadIO m => Text
   -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) a
-  -> IO a
+  -> m a
 withContinuousProcessDb file =
-  runSqlite file
+  liftIO . runSqlite file
 
 -- | Print a simple status of the database.
 statusCommand :: IO ()
@@ -324,8 +341,8 @@ stickyProgress total = go (0 :: Int)
 -- | Download all snapshots from stackage. The results are
 -- paginated. We want everything, so we just keep increasing the page
 -- index until we get a null result.
-downloadAllSnapshotTextNames :: IO (Set Text)
-downloadAllSnapshotTextNames = go 1 mempty
+downloadAllSnapshotTextNames :: MonadIO m => m (Set Text)
+downloadAllSnapshotTextNames = liftIO (go 1 mempty)
   where
     go page acc = do
       request <-
