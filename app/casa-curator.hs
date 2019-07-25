@@ -30,8 +30,9 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Parser
 import qualified Data.Aeson.Types as Aeson
 import           Data.Conduit
+import qualified Data.Conduit.List as CL
 import           Data.Generics
-import           Data.List
+import           Data.List hiding (deleteBy)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Set (Set)
@@ -52,7 +53,9 @@ import           RIO.Orphans
 import           RIO.Process
 import           System.Environment
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+share
+  [mkPersist sqlSettings, mkMigrate "migrateAll"]
+  [persistLowerCase|
 LastPushed
   blobId BlobId
 SnapshotLoaded
@@ -69,12 +72,16 @@ data CasaPush =
 
 $(makeLenses ''CasaPush)
 
-instance HasLogFunc CasaPush where logFuncL = casaPushPantry . logFuncL
-instance HasResourceMap CasaPush where resourceMapL = casaPushResourceMap
+instance HasLogFunc CasaPush where
+  logFuncL = casaPushPantry . logFuncL
+
+instance HasResourceMap CasaPush where
+  resourceMapL = casaPushResourceMap
 
 data PushConfig =
   PushConfig
     { configCasaUrl :: String
+    , configSqliteFile :: Text
     }
   deriving (Show)
 
@@ -82,7 +89,8 @@ data PushConfig =
 pushConfigParser :: Parser PushConfig
 pushConfigParser =
   PushConfig <$>
-  strOption (long "push-url" <> metavar "URL" <> help "Casa push URL")
+  strOption (long "push-url" <> metavar "URL" <> help "Casa push URL") <*>
+  sqliteFileParser
 
 data PopulateConfig =
   PopulateConfig
@@ -101,26 +109,32 @@ populateConfigParser =
         help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
   downloadConcurrencyParser
 
-data ContinuousPopulatePushConfig =
-  ContinuousPopulatePushConfig
-    { continuousPopulatePushConfigSleepFor :: Int
-    , continuousPopulatePushConfigSqliteFile :: Text
-    , continuousPopulatePushConfigPopulateConfig :: PopulateConfig
+data ContinuousConfig =
+  ContinuousConfig
+    { continuousConfigSleepFor :: Int
+    , continuousConfigSqliteFile :: Text
+    , continuousConfigPopulateConfig :: PopulateConfig
+    , continuousConfigPushConfig :: PushConfig
     }
 
-continuousPopulatePushConfig :: Parser ContinuousPopulatePushConfig
-continuousPopulatePushConfig =
-  ContinuousPopulatePushConfig <$>
+continuousConfig :: Parser ContinuousConfig
+continuousConfig =
+  ContinuousConfig <$>
   option
     auto
     (long "sleep-for" <> help "Sleep for at least n minutes between polling" <>
      metavar "INT") <*>
+  sqliteFileParser <*>
+  populateConfigParser <*>
+  pushConfigParser
+
+sqliteFileParser :: Parser Text
+sqliteFileParser =
   fmap
     T.pack
     (strOption
        (long "sqlite-file" <> help "Filepath to use for sqlite database" <>
-        metavar "PATH")) <*>
-  populateConfigParser
+        metavar "PATH"))
 
 downloadConcurrencyParser :: Parser Int
 downloadConcurrencyParser =
@@ -139,8 +153,16 @@ main = do
       "casa-curator"
       "casa-curator"
       (pure ())
-      (do addCommand "push" "Push ALL blobs to Casa" pushCommand pushConfigParser
-          addCommand "status" "Give some stats about the pantry database" (const statusCommand) (pure ())
+      (do addCommand
+            "push"
+            "Push ALL blobs to Casa"
+            pushCommand
+            pushConfigParser
+          addCommand
+            "status"
+            "Give some stats about the pantry database"
+            (const statusCommand)
+            (pure ())
           addCommand
             "populate"
             "Populate the pantry database with blobs from a given snapshot"
@@ -150,56 +172,67 @@ main = do
             "continuous-populate-push"
             "Poll stackage for new snapshots, \"populate\" then \"push\", repeatedly"
             continuousPopulatePushCommand
-            continuousPopulatePushConfig)
+            continuousConfig)
   runCmd
 
-continuousPopulatePushCommand :: ContinuousPopulatePushConfig -> IO ()
-continuousPopulatePushCommand continuousPopulatePushConfig = do
+continuousPopulatePushCommand :: ContinuousConfig -> IO ()
+continuousPopulatePushCommand continuousConfig = do
   runSqlite
-    (continuousPopulatePushConfigSqliteFile continuousPopulatePushConfig)
+    (continuousConfigSqliteFile continuousConfig)
     (runMigration migrateAll)
-  runPantryApp
-    (forever
-       (do runSqlite
-             (continuousPopulatePushConfigSqliteFile
-                continuousPopulatePushConfig)
-             pullAndPush
-           delay))
+  forever
+    (do pullAndPush
+        delay)
   where
     delay =
-      threadDelay
-        (1000 * 60 *
-         (continuousPopulatePushConfigSleepFor continuousPopulatePushConfig))
+      threadDelay (1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
-      availableNames <- liftIO downloadAllSnapshotTextNames
-      loadedSnapshots :: [Entity SnapshotLoaded] <-
-        selectList [] [] :: ReaderT SqlBackend (NoLoggingT (ResourceT (RIO env))) [Entity SnapshotLoaded]
+      availableNames <- downloadAllSnapshotTextNames
+      loadedSnapshots <-
+        withContinuousProcessDb
+          (continuousConfigSqliteFile continuousConfig)
+          (selectList [] [])
       let loadedNames =
             Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
           newNames = Set.difference availableNames loadedNames
-          liftRIO = lift . lift . lift
-      liftRIO
-        (for_
-           newNames
-           (\snapshotTextName -> do
-              let unresoledRawSnapshotLocation =
-                    parseRawSnapshotLocation snapshotTextName
-              rawSnapshot <-
-                loadSnapshotByUnresolvedSnapshotLocation
-                  unresoledRawSnapshotLocation
-              populateFromRawSnapshot
-                (populateConfigConcurrentDownloads
-                   (continuousPopulatePushConfigPopulateConfig
-                      continuousPopulatePushConfig))
-                rawSnapshot))
-      for_
-        newNames
-        (\name -> do
-           now <- liftIO getCurrentTime
-           insert_
-             (SnapshotLoaded
-                {snapshotLoadedName = name, snapshotLoadedTimestamp = now}))
+      for_ newNames (populateViaSnapshotTextName continuousConfig)
+      withContinuousProcessDb
+        (continuousConfigSqliteFile continuousConfig)
+        (for_ newNames insertLoadedSnapshot)
+      pushCommand (continuousConfigPushConfig continuousConfig)
 
+-- | Record that we've populated pantry with a snapshot.
+insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
+insertLoadedSnapshot name = do
+  now <- liftIO getCurrentTime
+  void
+    (insertUnique
+       (SnapshotLoaded
+          {snapshotLoadedName = name, snapshotLoadedTimestamp = now}))
+
+-- | Populate pantry via a text name of a snapshot.
+populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
+populateViaSnapshotTextName continuousConfig snapshotTextName =
+  runPantryApp
+    (do let unresoledRawSnapshotLocation =
+              parseRawSnapshotLocation snapshotTextName
+        rawSnapshot <-
+          loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
+        populateFromRawSnapshot
+          (populateConfigConcurrentDownloads
+             (continuousConfigPopulateConfig continuousConfig))
+          rawSnapshot)
+
+-- | With the database used for the continous process (to remember
+-- what it has done).
+withContinuousProcessDb ::
+     Text
+  -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) a
+  -> IO a
+withContinuousProcessDb file =
+  runSqlite file
+
+-- | Print a simple status of the database.
 statusCommand :: IO ()
 statusCommand =
   runPantryApp
@@ -217,6 +250,7 @@ statusCommand =
                   (do count <- allBlobsCount
                       lift (logInfo ("Blobs in database: " <> display count))))))
 
+-- | Populate the pantry database.
 populateCommand :: MonadIO m => PopulateConfig -> m ()
 populateCommand populateConfig =
   runPantryApp
@@ -230,7 +264,13 @@ populateCommand populateConfig =
 
 -- | Start pushing.
 pushCommand :: MonadIO m => PushConfig -> m ()
-pushCommand config =
+pushCommand config = do
+  mlastBlobIdRef <- liftIO (newIORef Nothing)
+  mlastPushedBlobId :: Maybe BlobId <-
+    fmap
+      (fmap (lastPushedBlobId . entityVal))
+      (liftIO
+         (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryApp
     (do pantryApp <- ask
         storage <- fmap (pcStorage . view pantryConfigL) ask
@@ -246,7 +286,21 @@ pushCommand config =
                   (do count <- allBlobsCount
                       blobsSink
                         (configCasaUrl config)
-                        (allBlobsSource .| stickyProgress count)))))
+                        (allBlobsSource mlastPushedBlobId .|
+                         CL.mapM
+                           (\(blobId, blob) -> do
+                              liftIO (writeIORef mlastBlobIdRef (Just blobId))
+                              pure blob) .|
+                         stickyProgress count)))))
+  mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
+  case mlastBlobId of
+    Nothing -> pure ()
+    Just lastBlobId ->
+      liftIO
+        (withContinuousProcessDb
+           (configSqliteFile config)
+           (do deleteWhere ([] :: [Filter LastPushed])
+               insert_ (LastPushed {lastPushedBlobId = lastBlobId})))
 
 -- | Output progress of blobs pushed.
 stickyProgress ::
