@@ -45,7 +45,9 @@ packages:
       size: 3369
       sha256: 1e3531f9cd19177f4816c1d3a5046b8b1677443c199bbdefb12dd54ae598830b
   original:
+    size: 89268
     url: https://github.com/commercialhaskell/pantry/archive/3cddc2bb799bf475979b0743f56623ea3b8732a1.tar.gz
+    sha256: b0658a1bf5beb5836e19095128b1fd2be5201a4e094a442764781dc11430dd3e
 - completed:
     size: 8744
     subdir: casa-client
@@ -60,8 +62,10 @@ packages:
       size: 120
       sha256: c30e67a87669d29151142df5569c704e04b23fc0557dfe8d85b214b991aa7940
   original:
+    size: 8744
     subdir: casa-client
     url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
 - completed:
     size: 8744
     subdir: casa-types
@@ -76,8 +80,10 @@ packages:
       size: 177
       sha256: 38bb767ea4f390e1faee24e66bffef4a2eea3a0ff3e011a74679f7252146936e
   original:
+    size: 8744
     subdir: casa-types
     url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
 snapshots:
 - completed:
     size: 500539
