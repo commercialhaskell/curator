@@ -12,13 +12,6 @@ packages:
   original:
     hackage: http-download-0.1.0.0
 - completed:
-    hackage: pantry-0.1.1.0@sha256:3dcf4b244038deb9fb60f0a8232fc617cbf0f7e0976d5c8694a68004490339e3,6295
-    pantry-tree:
-      size: 2399
-      sha256: 94ac3950da8dd660b21ce9365d208a9d67b35b0b048ccfeae95f175f676a8890
-  original:
-    hackage: pantry-0.1.1.0
-- completed:
     hackage: rio-prettyprint-0.1.0.0@sha256:764e1a357275c3c62d57c494d038feae01cf745788e7d0e97367ba793c9670c3,1359
     pantry-tree:
       size: 479
@@ -39,6 +32,52 @@ packages:
       sha256: 6f37903a10ab3ecd0da94f1130ec6f6dbcc5f84c4e468da29329510f6149d75e
   original:
     hackage: rio-0.1.10.0
+- completed:
+    size: 90023
+    url: https://github.com/commercialhaskell/pantry/archive/6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00.tar.gz
+    cabal-file:
+      size: 4651
+      sha256: ec1e4083ec4dfcea4f66bd7f5b26496400235ae03dfd88521d0002e7beb6d84f
+    name: pantry
+    version: 0.1.1.1
+    sha256: e21296f2bad9b023fb4fdc3c0b54f77677071a57fd68142c9d570c1ce4743d6c
+    pantry-tree:
+      size: 3422
+      sha256: 17353c7b413b6e7c066af7e13e4aec693a6d14e7151d05956060cc2fbd1ef6d9
+  original:
+    url: https://github.com/commercialhaskell/pantry/archive/6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00.tar.gz
+- completed:
+    size: 8744
+    subdir: casa-client
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
+    cabal-file:
+      size: 512
+      sha256: 8d7ed9a87422ac784486aa5eb634fda93382fe5260a4a0c63e2b17abc3c5cd18
+    name: casa-client
+    version: 0.0.0
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
+    pantry-tree:
+      size: 120
+      sha256: c30e67a87669d29151142df5569c704e04b23fc0557dfe8d85b214b991aa7940
+  original:
+    subdir: casa-client
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
+- completed:
+    size: 8744
+    subdir: casa-types
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
+    cabal-file:
+      size: 404
+      sha256: 9a9bc4febca2c369a93c8180f966483359cc9a8a6590021d542a73f9c6e7bcb4
+    name: casa-types
+    version: 0.0.0
+    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
+    pantry-tree:
+      size: 177
+      sha256: 38bb767ea4f390e1faee24e66bffef4a2eea3a0ff3e011a74679f7252146936e
+  original:
+    subdir: casa-types
+    url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
 snapshots:
 - completed:
     size: 500539

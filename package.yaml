@@ -46,3 +46,26 @@ executables:
     - curator
     - http-download
     - optparse-simple
+  casa-curator:
+    ghc-options: -threaded
+    main: casa-curator.hs
+    source-dirs: app
+    dependencies:
+      - curator
+      - casa-client
+      - conduit
+      - persistent
+      - rio-orphans
+      - lens
+      - resourcet
+      - optparse-applicative
+      - text
+      - optparse-simple
+      - containers
+      - aeson
+      - http-conduit
+      - syb
+      - persistent-sqlite
+      - persistent-template
+      - time
+      - monad-logger

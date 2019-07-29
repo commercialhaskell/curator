@@ -1,7 +1,24 @@
 resolver: lts-13.28
+packages:
+- .
+
+# For local dev
+# - ../pantry
+# - ../casa/casa-client
+# - ../casa/casa-types
+
 extra-deps:
 - http-download-0.1.0.0
-- pantry-0.1.1.0
 - rio-prettyprint-0.1.0.0
 - ansi-terminal-0.9.1
 - rio-0.1.10.0
+
+#- pantry-0.1.1.0
+- github: commercialhaskell/pantry
+  commit: 6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00
+
+- github: fpco/casa
+  commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
+  subdirs:
+     - casa-client
+     - casa-types
