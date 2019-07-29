@@ -33,21 +33,19 @@ packages:
   original:
     hackage: rio-0.1.10.0
 - completed:
-    size: 89264
-    url: https://github.com/commercialhaskell/pantry/archive/6c8877ead858186623df2af77d4878aa5792601e.tar.gz
+    size: 90023
+    url: https://github.com/commercialhaskell/pantry/archive/6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00.tar.gz
     cabal-file:
       size: 4651
-      sha256: 62e2435879a4cef30e7f945e047b3704cdd497fefe821e5eef358feefd374656
+      sha256: ec1e4083ec4dfcea4f66bd7f5b26496400235ae03dfd88521d0002e7beb6d84f
     name: pantry
-    version: 0.1.1.0
-    sha256: ac1647b5d30d9f1d5fa476393fe9bdde8c204dcd2faf52290facc90d46bbe2b8
+    version: 0.1.1.1
+    sha256: e21296f2bad9b023fb4fdc3c0b54f77677071a57fd68142c9d570c1ce4743d6c
     pantry-tree:
-      size: 3369
-      sha256: 221d99b626a613cf0d3d28c71d3d4493f721ad2cbd2f811aad28afe0b74afdc0
+      size: 3422
+      sha256: 17353c7b413b6e7c066af7e13e4aec693a6d14e7151d05956060cc2fbd1ef6d9
   original:
-    size: 89264
-    url: https://github.com/commercialhaskell/pantry/archive/6c8877ead858186623df2af77d4878aa5792601e.tar.gz
-    sha256: ac1647b5d30d9f1d5fa476393fe9bdde8c204dcd2faf52290facc90d46bbe2b8
+    url: https://github.com/commercialhaskell/pantry/archive/6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00.tar.gz
 - completed:
     size: 8744
     subdir: casa-client
@@ -62,10 +60,8 @@ packages:
       size: 120
       sha256: c30e67a87669d29151142df5569c704e04b23fc0557dfe8d85b214b991aa7940
   original:
-    size: 8744
     subdir: casa-client
     url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
-    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
 - completed:
     size: 8744
     subdir: casa-types
@@ -80,10 +76,8 @@ packages:
       size: 177
       sha256: 38bb767ea4f390e1faee24e66bffef4a2eea3a0ff3e011a74679f7252146936e
   original:
-    size: 8744
     subdir: casa-types
     url: https://github.com/fpco/casa/archive/8ff6b5fd6b4136f8104628d61ca81e7b64c8c553.tar.gz
-    sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
 snapshots:
 - completed:
     size: 500539

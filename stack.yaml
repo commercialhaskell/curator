@@ -15,14 +15,10 @@ extra-deps:
 
 #- pantry-0.1.1.0
 - github: commercialhaskell/pantry
-  commit: 6c8877ead858186623df2af77d4878aa5792601e
-  sha256: ac1647b5d30d9f1d5fa476393fe9bdde8c204dcd2faf52290facc90d46bbe2b8
-  size: 89264
+  commit: 6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00
 
 - github: fpco/casa
   commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
-  sha256: 94ce6d50d4a7fbd40021eec5e998681a06fd583e24faca0b485ae3f96b989c50
-  size: 8744
   subdirs:
      - casa-client
      - casa-types
