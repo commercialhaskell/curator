@@ -59,6 +59,8 @@ share
   [persistLowerCase|
 LastPushed
   blobId BlobId
+LastDownloaded
+  hackageCabalId HackageCabalId
 SnapshotLoaded
   name Text
   timestamp UTCTime
@@ -193,44 +195,66 @@ continuousPopulatePushCommand continuousConfig = do
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
+      mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
+        fmap
+          (fmap (lastDownloadedHackageCabalId . entityVal))
+          (liftIO
+             (withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (selectFirst [] [])))
       newHackagePackages <-
         runPantryApp
           (do logInfo "Updating Hackage index ..."
               forceUpdateHackageIndex Nothing
               logInfo "Hackage index updated."
-              runPantryStorage (pure ())
-              pure [])
-      pure ()
-      -- newNames <-
-      --   runSimpleApp
-      --     (do logSticky "Downloading snapshots from Stackage ..."
-      --         availableNames <- downloadAllSnapshotTextNames
-      --         logStickyDone "Downloaded snapshots from Stackage."
-      --         loadedSnapshots <-
-      --           withContinuousProcessDb
-      --             (continuousConfigSqliteFile continuousConfig)
-      --             (selectList [] [])
-      --         let loadedNames =
-      --               Set.fromList
-      --                 (map (snapshotLoadedName . entityVal) loadedSnapshots)
-      --             newNames = Set.difference availableNames loadedNames
-      --         logInfo
-      --           ("There are " <> display (length newNames) <> " new snapshots.")
-      --         pure newNames)
-      -- for_
-      --   newNames
-      --   (\name -> do
-      --      populateViaSnapshotTextName continuousConfig name
-      --      withContinuousProcessDb
-      --        (continuousConfigSqliteFile continuousConfig)
-      --        (insertLoadedSnapshot name))
-      -- unless
-      --   (null newNames)
-      --   (pushCommand
-      --      PushConfig
-      --        { configCasaUrl = continuousConfigPushUrl continuousConfig
-      --        , configSqliteFile = continuousConfigSqliteFile continuousConfig
-      --        })
+              count <-
+                runPantryStorage
+                  (allHackageCabalCount mlastDownloadedHackageCabal)
+              logInfo
+                ("Will download " <> display count <>
+                 " Hackage cabal revisions.")
+              logInfo ("Pulling from database ...")
+              rplis <-
+                runPantryStorage
+                  (allHackageCabalRawPackageLocations
+                     mlastDownloadedHackageCabal)
+              logInfo "Done. Loading packages ..."
+              for_
+                (zip [0 :: Int ..] (M.toList rplis))
+                (\(i, (hackageCabalId, rpli)) -> do
+                   logSticky
+                     ("[" <> display i <> "/" <> display count <> "] " <>
+                      display rpli)
+                   loadPackageRaw rpli)
+              logStickyDone "Done downloading packages.")
+      newNames <-
+        runSimpleApp
+          (do logSticky "Downloading snapshots from Stackage ..."
+              availableNames <- downloadAllSnapshotTextNames
+              logStickyDone "Downloaded snapshots from Stackage."
+              loadedSnapshots <-
+                withContinuousProcessDb
+                  (continuousConfigSqliteFile continuousConfig)
+                  (selectList [] [])
+              let loadedNames =
+                    Set.fromList
+                      (map (snapshotLoadedName . entityVal) loadedSnapshots)
+                  newNames = Set.difference availableNames loadedNames
+              logInfo
+                ("There are " <> display (length newNames) <> " new snapshots.")
+              pure newNames)
+      for_
+        newNames
+        (\name -> do
+           populateViaSnapshotTextName continuousConfig name
+           withContinuousProcessDb
+             (continuousConfigSqliteFile continuousConfig)
+             (insertLoadedSnapshot name))
+      pushCommand
+        PushConfig
+          { configCasaUrl = continuousConfigPushUrl continuousConfig
+          , configSqliteFile = continuousConfigSqliteFile continuousConfig
+          }
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
