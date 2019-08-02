@@ -65,18 +65,18 @@ SnapshotLoaded
   Unique SnapshotLoadedNameUnique name
 |]
 
-data CasaApp =
-  CasaApp
+data PantryStorage =
+  PantryStorage
     { _casaAppPantry :: !PantryApp
     , _casaAppResourceMap :: !ResourceMap
     }
 
-$(makeLenses ''CasaApp)
+$(makeLenses ''PantryStorage)
 
-instance HasLogFunc CasaApp where
+instance HasLogFunc PantryStorage where
   logFuncL = casaAppPantry . logFuncL
 
-instance HasResourceMap CasaApp where
+instance HasResourceMap PantryStorage where
   resourceMapL = casaAppResourceMap
 
 data PushConfig =
@@ -198,7 +198,7 @@ continuousPopulatePushCommand continuousConfig = do
           (do logInfo "Updating Hackage index ..."
               forceUpdateHackageIndex Nothing
               logInfo "Hackage index updated."
-
+              runPantryStorage (pure ())
               pure [])
       pure ()
       -- newNames <-
@@ -267,7 +267,7 @@ withContinuousProcessDb file =
 statusCommand :: IO ()
 statusCommand =
   runPantryApp
-    (runCasaApp
+    (runPantryStorage
        (do count <- allBlobsCount Nothing
            lift (logInfo ("Blobs in database: " <> display count))))
 
@@ -293,7 +293,7 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryApp
-    (runCasaApp
+    (runPantryStorage
         (do count <- allBlobsCount mlastPushedBlobId
             if count > 0
               then blobsSink
@@ -404,17 +404,17 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
   loadSnapshot snapshotLocation
 
-runCasaApp ::
+runPantryStorage ::
      (MonadReader PantryApp m, MonadUnliftIO m)
-  => ReaderT SqlBackend (RIO CasaApp) b
+  => ReaderT SqlBackend (RIO PantryStorage) b
   -> m b
-runCasaApp action = do
+runPantryStorage action = do
   pantryApp <- ask
   storage <- fmap (pcStorage . view pantryConfigL) ask
   withResourceMap
     (\resourceMap ->
        runRIO
-         (CasaApp
+         (PantryStorage
             {_casaAppResourceMap = resourceMap, _casaAppPantry = pantryApp})
          (withStorage_
             storage
