@@ -64,19 +64,19 @@ SnapshotLoaded
   Unique SnapshotLoadedNameUnique name
 |]
 
-data CasaPush =
-  CasaPush
-    { _casaPushPantry :: !PantryApp
-    , _casaPushResourceMap :: !ResourceMap
+data CasaApp =
+  CasaApp
+    { _casaAppPantry :: !PantryApp
+    , _casaAppResourceMap :: !ResourceMap
     }
 
-$(makeLenses ''CasaPush)
+$(makeLenses ''CasaApp)
 
-instance HasLogFunc CasaPush where
-  logFuncL = casaPushPantry . logFuncL
+instance HasLogFunc CasaApp where
+  logFuncL = casaAppPantry . logFuncL
 
-instance HasResourceMap CasaPush where
-  resourceMapL = casaPushResourceMap
+instance HasResourceMap CasaApp where
+  resourceMapL = casaAppResourceMap
 
 data PushConfig =
   PushConfig
@@ -192,36 +192,44 @@ continuousPopulatePushCommand continuousConfig = do
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
-      newNames <-
-        runSimpleApp
-          (do logSticky "Downloading snapshots from Stackage ..."
-              availableNames <- downloadAllSnapshotTextNames
-              logStickyDone "Downloaded snapshots from Stackage."
-              loadedSnapshots <-
-                withContinuousProcessDb
-                  (continuousConfigSqliteFile continuousConfig)
-                  (selectList [] [])
-              let loadedNames =
-                    Set.fromList
-                      (map (snapshotLoadedName . entityVal) loadedSnapshots)
-                  newNames = Set.difference availableNames loadedNames
-              logInfo
-                ("There are " <> display (length newNames) <> " new snapshots.")
-              pure newNames)
-      for_
-        newNames
-        (\name -> do
-           populateViaSnapshotTextName continuousConfig name
-           withContinuousProcessDb
-             (continuousConfigSqliteFile continuousConfig)
-             (insertLoadedSnapshot name))
-      unless
-        (null newNames)
-        (pushCommand
-           PushConfig
-             { configCasaUrl = continuousConfigPushUrl continuousConfig
-             , configSqliteFile = continuousConfigSqliteFile continuousConfig
-             })
+      newHackagePackages <-
+        runPantryApp
+          (do logInfo "Updating Hackage index ..."
+              forceUpdateHackageIndex Nothing
+              logInfo "Hackage index updated."
+
+              pure [])
+      pure ()
+      -- newNames <-
+      --   runSimpleApp
+      --     (do logSticky "Downloading snapshots from Stackage ..."
+      --         availableNames <- downloadAllSnapshotTextNames
+      --         logStickyDone "Downloaded snapshots from Stackage."
+      --         loadedSnapshots <-
+      --           withContinuousProcessDb
+      --             (continuousConfigSqliteFile continuousConfig)
+      --             (selectList [] [])
+      --         let loadedNames =
+      --               Set.fromList
+      --                 (map (snapshotLoadedName . entityVal) loadedSnapshots)
+      --             newNames = Set.difference availableNames loadedNames
+      --         logInfo
+      --           ("There are " <> display (length newNames) <> " new snapshots.")
+      --         pure newNames)
+      -- for_
+      --   newNames
+      --   (\name -> do
+      --      populateViaSnapshotTextName continuousConfig name
+      --      withContinuousProcessDb
+      --        (continuousConfigSqliteFile continuousConfig)
+      --        (insertLoadedSnapshot name))
+      -- unless
+      --   (null newNames)
+      --   (pushCommand
+      --      PushConfig
+      --        { configCasaUrl = continuousConfigPushUrl continuousConfig
+      --        , configSqliteFile = continuousConfigSqliteFile continuousConfig
+      --        })
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
@@ -263,9 +271,9 @@ statusCommand =
         withResourceMap
           (\resourceMap ->
              runRIO
-               (CasaPush
-                  { _casaPushResourceMap = resourceMap
-                  , _casaPushPantry = pantryApp
+               (CasaApp
+                  { _casaAppResourceMap = resourceMap
+                  , _casaAppPantry = pantryApp
                   })
                (withStorage_
                   storage
@@ -299,9 +307,9 @@ pushCommand config = do
         withResourceMap
           (\resourceMap ->
              runRIO
-               (CasaPush
-                  { _casaPushResourceMap = resourceMap
-                  , _casaPushPantry = pantryApp
+               (CasaApp
+                  { _casaAppResourceMap = resourceMap
+                  , _casaAppPantry = pantryApp
                   })
                (withStorage_
                   storage
