@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -266,19 +267,9 @@ withContinuousProcessDb file =
 statusCommand :: IO ()
 statusCommand =
   runPantryApp
-    (do pantryApp <- ask
-        storage <- fmap (pcStorage . view pantryConfigL) ask
-        withResourceMap
-          (\resourceMap ->
-             runRIO
-               (CasaApp
-                  { _casaAppResourceMap = resourceMap
-                  , _casaAppPantry = pantryApp
-                  })
-               (withStorage_
-                  storage
-                  (do count <- allBlobsCount Nothing
-                      lift (logInfo ("Blobs in database: " <> display count))))))
+    (runCasaApp
+       (do count <- allBlobsCount Nothing
+           lift (logInfo ("Blobs in database: " <> display count))))
 
 -- | Populate the pantry database.
 populateCommand :: MonadIO m => PopulateConfig -> m ()
@@ -302,29 +293,19 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryApp
-    (do pantryApp <- ask
-        storage <- fmap (pcStorage . view pantryConfigL) ask
-        withResourceMap
-          (\resourceMap ->
-             runRIO
-               (CasaApp
-                  { _casaAppResourceMap = resourceMap
-                  , _casaAppPantry = pantryApp
-                  })
-               (withStorage_
-                  storage
-                  (do count <- allBlobsCount mlastPushedBlobId
-                      if count > 0
-                        then blobsSink
-                               (configCasaUrl config)
-                               (allBlobsSource mlastPushedBlobId .|
-                                CL.mapM
-                                  (\(blobId, blob) -> do
-                                     liftIO
-                                       (writeIORef mlastBlobIdRef (Just blobId))
-                                     pure blob) .|
-                                stickyProgress count)
-                        else pure ()))))
+    (runCasaApp
+        (do count <- allBlobsCount mlastPushedBlobId
+            if count > 0
+              then blobsSink
+                     (configCasaUrl config)
+                     (allBlobsSource mlastPushedBlobId .|
+                      CL.mapM
+                        (\(blobId, blob) -> do
+                           liftIO
+                             (writeIORef mlastBlobIdRef (Just blobId))
+                           pure blob) .|
+                      stickyProgress count)
+              else pure ()))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
   case mlastBlobId of
     Nothing -> pure ()
@@ -422,3 +403,19 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   rawSnapshotLocation <- resolvePaths Nothing unresoledRawSnapshotLocation
   snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
   loadSnapshot snapshotLocation
+
+runCasaApp ::
+     (MonadReader PantryApp m, MonadUnliftIO m)
+  => ReaderT SqlBackend (RIO CasaApp) b
+  -> m b
+runCasaApp action = do
+  pantryApp <- ask
+  storage <- fmap (pcStorage . view pantryConfigL) ask
+  withResourceMap
+    (\resourceMap ->
+       runRIO
+         (CasaApp
+            {_casaAppResourceMap = resourceMap, _casaAppPantry = pantryApp})
+         (withStorage_
+            storage
+            action))
