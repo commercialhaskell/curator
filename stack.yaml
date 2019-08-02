@@ -13,12 +13,15 @@ extra-deps:
 - ansi-terminal-0.9.1
 - rio-0.1.10.0
 
-#- pantry-0.1.1.0
 - github: commercialhaskell/pantry
-  commit: 6ddb4438c50bcccbca2f8c6caabc0520c9e4ab00
+  commit: 9c0275396eb741c1ac90f115435d9c010f754669
+  size: 94105
+  sha256: 8bc27ecccd2c8d01e8479fae693cec21d51c4a90d803d49bd313b0a81a8d855a
 
 - github: fpco/casa
-  commit: 8ff6b5fd6b4136f8104628d61ca81e7b64c8c553
+  commit: 090b17e991819b552c1aff1125a447d45e0da954
+  sha256: 812e05de8f9abdbd1101fc94895dcfd5c35962c4d67a43cc20cbc06eb59ea1f0
+  size: 9508
   subdirs:
      - casa-client
      - casa-types
