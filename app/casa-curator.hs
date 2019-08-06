@@ -69,17 +69,17 @@ SnapshotLoaded
 
 data PantryStorage =
   PantryStorage
-    { _casaAppPantry :: !PantryApp
-    , _casaAppResourceMap :: !ResourceMap
+    { _pantryStoragePantry :: !PantryApp
+    , _pantryStorageResourceMap :: !ResourceMap
     }
 
 $(makeLenses ''PantryStorage)
 
 instance HasLogFunc PantryStorage where
-  logFuncL = casaAppPantry . logFuncL
+  logFuncL = pantryStoragePantry . logFuncL
 
 instance HasResourceMap PantryStorage where
-  resourceMapL = casaAppResourceMap
+  resourceMapL = pantryStorageResourceMap
 
 data PushConfig =
   PushConfig
@@ -481,7 +481,7 @@ runPantryStorage action = do
     (\resourceMap ->
        runRIO
          (PantryStorage
-            {_casaAppResourceMap = resourceMap, _casaAppPantry = pantryApp})
+            {_pantryStorageResourceMap = resourceMap, _pantryStoragePantry = pantryApp})
          (withStorage_
             storage
             action))
