@@ -213,30 +213,61 @@ continuousPopulatePushCommand continuousConfig = do
               logInfo
                 ("Will download " <> display count <>
                  " Hackage cabal revisions.")
-              logInfo ("Pulling from database ...")
+              logInfo
+                ("Pulling from database ... " <>
+                 (case mlastDownloadedHackageCabal of
+                    Nothing -> ""
+                    Just sqlKey ->
+                      "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
               rplis <-
                 runPantryStorage
                   (allHackageCabalRawPackageLocations
                      mlastDownloadedHackageCabal)
               logInfo "Done. Loading packages ..."
-              pooledForConcurrentlyN_
-                (continuousConfigConcurrentDownloads continuousConfig)
-                (zip [0 :: Int ..] (M.toList rplis))
-                (\(i, (hackageCabalId, rpli)) -> do
-                   logSticky
-                     ("[" <> display i <> "/" <> display count <> "] " <>
-                      display rpli)
-                   catch
-                     (void (loadPackageRaw rpli))
-                     (\e ->
-                        let logit =
-                              logStickyDone
-                                ("[" <> display i <> "/" <> display count <>
-                                 "] "  <>
-                                 display e)
-                         in case e of
-                              TreeWithoutCabalFile {} -> logit
-                              _ -> logit))
+              hackageCabalIdChan <- newChan
+              race_
+                (pooledForConcurrentlyN_
+                   (continuousConfigConcurrentDownloads continuousConfig)
+                   (zip [0 :: Int ..] (M.toList rplis))
+                   (\(i, (hackageCabalId, rpli)) -> do
+                      logSticky
+                        ("[" <> display i <> "/" <> display count <> "] " <>
+                         display rpli)
+                      catch
+                        (void (loadPackageRaw rpli))
+                        (\e ->
+                           let logit =
+                                 logStickyDone
+                                   ("[" <> display i <> "/" <> display count <>
+                                    "] " <>
+                                    display e)
+                            in case e of
+                                 TreeWithoutCabalFile {} -> logit
+                                 _ -> logit)
+                      writeChan hackageCabalIdChan hackageCabalId))
+                (liftIO
+                   (let loop mlastHackageCabalId =
+                          forever
+                            (do hackageCabalId <- readChan hackageCabalIdChan
+                                let write =
+                                      withContinuousProcessDb
+                                        (continuousConfigSqliteFile
+                                           continuousConfig)
+                                        (do deleteWhere
+                                              ([] :: [Filter LastDownloaded])
+                                            insert_
+                                              (LastDownloaded
+                                                 { lastDownloadedHackageCabalId =
+                                                     hackageCabalId
+                                                 }))
+                                case mlastHackageCabalId of
+                                  Nothing -> write
+                                  Just lastHackageCabalId ->
+                                    if hackageCabalId > lastHackageCabalId
+                                      then write
+                                      else pure ()
+                                loop (Just hackageCabalId))
+                     in loop Nothing))
               logStickyDone "Done downloading packages.")
       newNames <-
         runSimpleApp
