@@ -219,13 +219,24 @@ continuousPopulatePushCommand continuousConfig = do
                   (allHackageCabalRawPackageLocations
                      mlastDownloadedHackageCabal)
               logInfo "Done. Loading packages ..."
-              for_
+              pooledForConcurrentlyN_
+                (continuousConfigConcurrentDownloads continuousConfig)
                 (zip [0 :: Int ..] (M.toList rplis))
                 (\(i, (hackageCabalId, rpli)) -> do
                    logSticky
                      ("[" <> display i <> "/" <> display count <> "] " <>
                       display rpli)
-                   loadPackageRaw rpli)
+                   catch
+                     (void (loadPackageRaw rpli))
+                     (\e ->
+                        let logit =
+                              logStickyDone
+                                ("[" <> display i <> "/" <> display count <>
+                                 "] "  <>
+                                 display e)
+                         in case e of
+                              TreeWithoutCabalFile {} -> logit
+                              _ -> logit))
               logStickyDone "Done downloading packages.")
       newNames <-
         runSimpleApp
