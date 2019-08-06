@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -58,25 +59,27 @@ share
   [persistLowerCase|
 LastPushed
   blobId BlobId
+LastDownloaded
+  hackageCabalId HackageCabalId
 SnapshotLoaded
   name Text
   timestamp UTCTime
   Unique SnapshotLoadedNameUnique name
 |]
 
-data CasaPush =
-  CasaPush
-    { _casaPushPantry :: !PantryApp
-    , _casaPushResourceMap :: !ResourceMap
+data PantryStorage =
+  PantryStorage
+    { _pantryStoragePantry :: !PantryApp
+    , _pantryStorageResourceMap :: !ResourceMap
     }
 
-$(makeLenses ''CasaPush)
+$(makeLenses ''PantryStorage)
 
-instance HasLogFunc CasaPush where
-  logFuncL = casaPushPantry . logFuncL
+instance HasLogFunc PantryStorage where
+  logFuncL = pantryStoragePantry . logFuncL
 
-instance HasResourceMap CasaPush where
-  resourceMapL = casaPushResourceMap
+instance HasResourceMap PantryStorage where
+  resourceMapL = pantryStorageResourceMap
 
 data PushConfig =
   PushConfig
@@ -192,6 +195,80 @@ continuousPopulatePushCommand continuousConfig = do
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
+      mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
+        fmap
+          (fmap (lastDownloadedHackageCabalId . entityVal))
+          (liftIO
+             (withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (selectFirst [] [])))
+      newHackagePackages <-
+        runPantryApp
+          (do logInfo "Updating Hackage index ..."
+              forceUpdateHackageIndex Nothing
+              logInfo "Hackage index updated."
+              count <-
+                runPantryStorage
+                  (allHackageCabalCount mlastDownloadedHackageCabal)
+              logInfo
+                ("Will download " <> display count <>
+                 " Hackage cabal revisions.")
+              logInfo
+                ("Pulling from database ... " <>
+                 (case mlastDownloadedHackageCabal of
+                    Nothing -> ""
+                    Just sqlKey ->
+                      "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
+              rplis <-
+                runPantryStorage
+                  (allHackageCabalRawPackageLocations
+                     mlastDownloadedHackageCabal)
+              logInfo "Done. Loading packages ..."
+              hackageCabalIdChan <- newChan
+              race_
+                (pooledForConcurrentlyN_
+                   (continuousConfigConcurrentDownloads continuousConfig)
+                   (zip [0 :: Int ..] (M.toList rplis))
+                   (\(i, (hackageCabalId, rpli)) -> do
+                      logSticky
+                        ("[" <> display i <> "/" <> display count <> "] " <>
+                         display rpli)
+                      catch
+                        (void (loadPackageRaw rpli))
+                        (\e ->
+                           let logit =
+                                 logStickyDone
+                                   ("[" <> display i <> "/" <> display count <>
+                                    "] " <>
+                                    display e)
+                            in case e of
+                                 TreeWithoutCabalFile {} -> logit
+                                 _ -> logit)
+                      writeChan hackageCabalIdChan hackageCabalId))
+                (liftIO
+                   (let loop mlastHackageCabalId =
+                          forever
+                            (do hackageCabalId <- readChan hackageCabalIdChan
+                                let write =
+                                      withContinuousProcessDb
+                                        (continuousConfigSqliteFile
+                                           continuousConfig)
+                                        (do deleteWhere
+                                              ([] :: [Filter LastDownloaded])
+                                            insert_
+                                              (LastDownloaded
+                                                 { lastDownloadedHackageCabalId =
+                                                     hackageCabalId
+                                                 }))
+                                case mlastHackageCabalId of
+                                  Nothing -> write
+                                  Just lastHackageCabalId ->
+                                    if hackageCabalId > lastHackageCabalId
+                                      then write
+                                      else pure ()
+                                loop (Just hackageCabalId))
+                     in loop Nothing))
+              logStickyDone "Done downloading packages.")
       newNames <-
         runSimpleApp
           (do logSticky "Downloading snapshots from Stackage ..."
@@ -215,13 +292,11 @@ continuousPopulatePushCommand continuousConfig = do
            withContinuousProcessDb
              (continuousConfigSqliteFile continuousConfig)
              (insertLoadedSnapshot name))
-      unless
-        (null newNames)
-        (pushCommand
-           PushConfig
-             { configCasaUrl = continuousConfigPushUrl continuousConfig
-             , configSqliteFile = continuousConfigSqliteFile continuousConfig
-             })
+      pushCommand
+        PushConfig
+          { configCasaUrl = continuousConfigPushUrl continuousConfig
+          , configSqliteFile = continuousConfigSqliteFile continuousConfig
+          }
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
@@ -258,19 +333,9 @@ withContinuousProcessDb file =
 statusCommand :: IO ()
 statusCommand =
   runPantryApp
-    (do pantryApp <- ask
-        storage <- fmap (pcStorage . view pantryConfigL) ask
-        withResourceMap
-          (\resourceMap ->
-             runRIO
-               (CasaPush
-                  { _casaPushResourceMap = resourceMap
-                  , _casaPushPantry = pantryApp
-                  })
-               (withStorage_
-                  storage
-                  (do count <- allBlobsCount Nothing
-                      lift (logInfo ("Blobs in database: " <> display count))))))
+    (runPantryStorage
+       (do count <- allBlobsCount Nothing
+           lift (logInfo ("Blobs in database: " <> display count))))
 
 -- | Populate the pantry database.
 populateCommand :: MonadIO m => PopulateConfig -> m ()
@@ -294,29 +359,19 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryApp
-    (do pantryApp <- ask
-        storage <- fmap (pcStorage . view pantryConfigL) ask
-        withResourceMap
-          (\resourceMap ->
-             runRIO
-               (CasaPush
-                  { _casaPushResourceMap = resourceMap
-                  , _casaPushPantry = pantryApp
-                  })
-               (withStorage_
-                  storage
-                  (do count <- allBlobsCount mlastPushedBlobId
-                      if count > 0
-                        then blobsSink
-                               (configCasaUrl config)
-                               (allBlobsSource mlastPushedBlobId .|
-                                CL.mapM
-                                  (\(blobId, blob) -> do
-                                     liftIO
-                                       (writeIORef mlastBlobIdRef (Just blobId))
-                                     pure blob) .|
-                                stickyProgress count)
-                        else pure ()))))
+    (runPantryStorage
+        (do count <- allBlobsCount mlastPushedBlobId
+            if count > 0
+              then blobsSink
+                     (configCasaUrl config)
+                     (allBlobsSource mlastPushedBlobId .|
+                      CL.mapM
+                        (\(blobId, blob) -> do
+                           liftIO
+                             (writeIORef mlastBlobIdRef (Just blobId))
+                           pure blob) .|
+                      stickyProgress count)
+              else pure ()))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
   case mlastBlobId of
     Nothing -> pure ()
@@ -414,3 +469,19 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   rawSnapshotLocation <- resolvePaths Nothing unresoledRawSnapshotLocation
   snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
   loadSnapshot snapshotLocation
+
+runPantryStorage ::
+     (MonadReader PantryApp m, MonadUnliftIO m)
+  => ReaderT SqlBackend (RIO PantryStorage) b
+  -> m b
+runPantryStorage action = do
+  pantryApp <- ask
+  storage <- fmap (pcStorage . view pantryConfigL) ask
+  withResourceMap
+    (\resourceMap ->
+       runRIO
+         (PantryStorage
+            {_pantryStorageResourceMap = resourceMap, _pantryStoragePantry = pantryApp})
+         (withStorage_
+            storage
+            action))
