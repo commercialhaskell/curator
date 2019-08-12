@@ -85,15 +85,19 @@ data PushConfig =
   PushConfig
     { configCasaUrl :: String
     , configSqliteFile :: Text
+    , pushConfigConcurrentDownloads :: Int
+    , pushConfigPushUrl :: String
+    , pushConfigMaxBlobsPerRequest :: Int
     }
   deriving (Show)
 
 -- | Command-line config.
 pushConfigParser :: Parser PushConfig
 pushConfigParser =
-  PushConfig <$>
+  PushConfig <$> pushUrlParser <*> sqliteFileParser <*>
+  downloadConcurrencyParser <*>
   pushUrlParser <*>
-  sqliteFileParser
+  maxBlobsPerRequestParser
 
 pushUrlParser :: Parser String
 pushUrlParser =
@@ -122,6 +126,7 @@ data ContinuousConfig =
     , continuousConfigSqliteFile :: Text
     , continuousConfigConcurrentDownloads :: Int
     , continuousConfigPushUrl :: String
+    , continuousConfigMaxBlobsPerRequest :: Int
     }
 
 continuousConfig :: Parser ContinuousConfig
@@ -133,7 +138,8 @@ continuousConfig =
      metavar "INT") <*>
   sqliteFileParser <*>
   downloadConcurrencyParser <*>
-  pushUrlParser
+  pushUrlParser <*>
+  maxBlobsPerRequestParser
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -150,6 +156,15 @@ downloadConcurrencyParser =
     (long "download-concurrency" <>
      help "How many package downloads to do at once" <>
      metavar "INT")
+
+maxBlobsPerRequestParser :: Parser Int
+maxBlobsPerRequestParser =
+  option
+    auto
+    (long "max-blobs-per-request" <>
+     help "How many package downloads to do at once" <>
+     metavar "INT" <>
+     value defaultCasaMaxPerRequest)
 
 -- | Main entry point.
 main :: IO ()
@@ -203,7 +218,10 @@ continuousPopulatePushCommand continuousConfig = do
                 (continuousConfigSqliteFile continuousConfig)
                 (selectFirst [] [])))
       newHackagePackages <-
-        runPantryApp
+        runPantryAppWith
+          (continuousConfigConcurrentDownloads continuousConfig)
+          (continuousConfigPushUrl continuousConfig)
+          (continuousConfigMaxBlobsPerRequest continuousConfig)
           (do logInfo "Updating Hackage index ..."
               forceUpdateHackageIndex Nothing
               logInfo "Hackage index updated."
@@ -294,7 +312,12 @@ continuousPopulatePushCommand continuousConfig = do
              (insertLoadedSnapshot name))
       pushCommand
         PushConfig
-          { configCasaUrl = continuousConfigPushUrl continuousConfig
+          { pushConfigConcurrentDownloads =
+              continuousConfigConcurrentDownloads continuousConfig
+          , pushConfigPushUrl = continuousConfigPushUrl continuousConfig
+          , pushConfigMaxBlobsPerRequest =
+              continuousConfigMaxBlobsPerRequest continuousConfig
+          , configCasaUrl = continuousConfigPushUrl continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           }
 
@@ -310,12 +333,16 @@ insertLoadedSnapshot name = do
 -- | Populate pantry via a text name of a snapshot.
 populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
 populateViaSnapshotTextName continuousConfig snapshotTextName =
-  runPantryApp
+  runPantryAppWith
+    (continuousConfigConcurrentDownloads continuousConfig)
+    (continuousConfigPushUrl continuousConfig)
+    (continuousConfigMaxBlobsPerRequest continuousConfig)
     (do let unresoledRawSnapshotLocation =
               parseRawSnapshotLocation snapshotTextName
         rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
-        logInfo ("Populating from snapshot " <> display snapshotTextName <> " ...")
+        logInfo
+          ("Populating from snapshot " <> display snapshotTextName <> " ...")
         populateFromRawSnapshot
           (continuousConfigConcurrentDownloads continuousConfig)
           rawSnapshot)
@@ -332,7 +359,10 @@ withContinuousProcessDb file =
 -- | Print a simple status of the database.
 statusCommand :: IO ()
 statusCommand =
-  runPantryApp
+  runPantryAppWith
+    0
+    defaultCasaPullURL
+    defaultCasaMaxPerRequest
     (runPantryStorage
        (do count <- allBlobsCount Nothing
            lift (logInfo ("Blobs in database: " <> display count))))
@@ -340,7 +370,10 @@ statusCommand =
 -- | Populate the pantry database.
 populateCommand :: MonadIO m => PopulateConfig -> m ()
 populateCommand populateConfig =
-  runPantryApp
+  runPantryAppWith
+    (populateConfigConcurrentDownloads populateConfig)
+    defaultCasaPullURL
+    defaultCasaMaxPerRequest
     (do rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
         populateFromRawSnapshot
@@ -358,7 +391,10 @@ pushCommand config = do
       (fmap (lastPushedBlobId . entityVal))
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
-  runPantryApp
+  runPantryAppWith
+     (pushConfigConcurrentDownloads config)
+     (pushConfigPushUrl config)
+     (pushConfigMaxBlobsPerRequest config)
     (runPantryStorage
         (do count <- allBlobsCount mlastPushedBlobId
             if count > 0

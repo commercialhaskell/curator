@@ -14,14 +14,14 @@ extra-deps:
 - rio-0.1.10.0
 
 - github: commercialhaskell/pantry
-  commit: b1fc437dbf6e8a8847cfde42a8fba32b2b72cce5
-  size: 94708
-  sha256: ad9df7d1d7e35c4957248c37131b2db7cd8fced35a6b97acd92bdbb1cc4d6f90
+  commit: 8ebe03d044f740bf9b975ee7c59d44e45d8a92f2
+  # size: 94708
+  # sha256: ad9df7d1d7e35c4957248c37131b2db7cd8fced35a6b97acd92bdbb1cc4d6f90
 
 - github: fpco/casa
-  commit: 090b17e991819b552c1aff1125a447d45e0da954
-  sha256: 812e05de8f9abdbd1101fc94895dcfd5c35962c4d67a43cc20cbc06eb59ea1f0
-  size: 9508
+  commit: a0cd05c1a9ce33acbb1bdfb9324370f884916e88
+  # sha256: 812e05de8f9abdbd1101fc94895dcfd5c35962c4d67a43cc20cbc06eb59ea1f0
+  # size: 9508
   subdirs:
      - casa-client
      - casa-types
