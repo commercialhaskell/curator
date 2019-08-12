@@ -83,10 +83,10 @@ instance HasResourceMap PantryStorage where
 
 data PushConfig =
   PushConfig
-    { configCasaUrl :: String
-    , configSqliteFile :: Text
+    { configSqliteFile :: Text
     , pushConfigConcurrentDownloads :: Int
     , pushConfigPushUrl :: String
+    , pushConfigPullUrl :: String
     , pushConfigMaxBlobsPerRequest :: Int
     }
   deriving (Show)
@@ -94,19 +94,25 @@ data PushConfig =
 -- | Command-line config.
 pushConfigParser :: Parser PushConfig
 pushConfigParser =
-  PushConfig <$> pushUrlParser <*> sqliteFileParser <*>
+  PushConfig <$> sqliteFileParser <*>
   downloadConcurrencyParser <*>
   pushUrlParser <*>
+  pullUrlParser <*>
   maxBlobsPerRequestParser
 
 pushUrlParser :: Parser String
 pushUrlParser =
   strOption (long "push-url" <> metavar "URL" <> help "Casa push URL")
 
+pullUrlParser :: Parser String
+pullUrlParser =
+  strOption (long "pull-url" <> metavar "URL" <> help "Casa pull URL")
+
 data PopulateConfig =
   PopulateConfig
     { populateConfigSnapshot :: Unresolved RawSnapshotLocation
     , populateConfigConcurrentDownloads :: Int
+    , populateConfigPullUrl :: String
     }
 
 -- | Command-line config.
@@ -118,7 +124,7 @@ populateConfigParser =
     (strOption
        (long "snapshot" <> metavar "SNAPSHOT" <>
         help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
-  downloadConcurrencyParser
+  downloadConcurrencyParser <*> pullUrlParser
 
 data ContinuousConfig =
   ContinuousConfig
@@ -126,6 +132,7 @@ data ContinuousConfig =
     , continuousConfigSqliteFile :: Text
     , continuousConfigConcurrentDownloads :: Int
     , continuousConfigPushUrl :: String
+    , continuousConfigPullUrl :: String
     , continuousConfigMaxBlobsPerRequest :: Int
     }
 
@@ -139,6 +146,7 @@ continuousConfig =
   sqliteFileParser <*>
   downloadConcurrencyParser <*>
   pushUrlParser <*>
+  pullUrlParser <*>
   maxBlobsPerRequestParser
 
 sqliteFileParser :: Parser Text
@@ -220,7 +228,7 @@ continuousPopulatePushCommand continuousConfig = do
       newHackagePackages <-
         runPantryAppWith
           (continuousConfigConcurrentDownloads continuousConfig)
-          (continuousConfigPushUrl continuousConfig)
+          (continuousConfigPullUrl continuousConfig)
           (continuousConfigMaxBlobsPerRequest continuousConfig)
           (do logInfo "Updating Hackage index ..."
               forceUpdateHackageIndex Nothing
@@ -315,9 +323,9 @@ continuousPopulatePushCommand continuousConfig = do
           { pushConfigConcurrentDownloads =
               continuousConfigConcurrentDownloads continuousConfig
           , pushConfigPushUrl = continuousConfigPushUrl continuousConfig
+          , pushConfigPullUrl = continuousConfigPullUrl continuousConfig
           , pushConfigMaxBlobsPerRequest =
               continuousConfigMaxBlobsPerRequest continuousConfig
-          , configCasaUrl = continuousConfigPushUrl continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           }
 
@@ -335,7 +343,7 @@ populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
 populateViaSnapshotTextName continuousConfig snapshotTextName =
   runPantryAppWith
     (continuousConfigConcurrentDownloads continuousConfig)
-    (continuousConfigPushUrl continuousConfig)
+    (continuousConfigPullUrl continuousConfig)
     (continuousConfigMaxBlobsPerRequest continuousConfig)
     (do let unresoledRawSnapshotLocation =
               parseRawSnapshotLocation snapshotTextName
@@ -372,7 +380,7 @@ populateCommand :: MonadIO m => PopulateConfig -> m ()
 populateCommand populateConfig =
   runPantryAppWith
     (populateConfigConcurrentDownloads populateConfig)
-    defaultCasaPullURL
+    (populateConfigPullUrl populateConfig)
     defaultCasaMaxPerRequest
     (do rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
@@ -393,13 +401,13 @@ pushCommand config = do
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryAppWith
      (pushConfigConcurrentDownloads config)
-     (pushConfigPushUrl config)
+     (pushConfigPullUrl config)
      (pushConfigMaxBlobsPerRequest config)
     (runPantryStorage
         (do count <- allBlobsCount mlastPushedBlobId
             if count > 0
               then blobsSink
-                     (configCasaUrl config)
+                     (pushConfigPushUrl config)
                      (allBlobsSource mlastPushedBlobId .|
                       CL.mapM
                         (\(blobId, blob) -> do
