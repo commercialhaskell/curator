@@ -143,6 +143,7 @@ data ContinuousConfig =
     , continuousConfigPullUrl :: PullUrl
     , continuousConfigMaxBlobsPerRequest :: Int
     , continuousConfigHackageLimit :: Maybe Int
+    , continuousConfigSnapshotsLimit :: Maybe Int
     }
 
 continuousConfig :: Parser ContinuousConfig
@@ -157,10 +158,16 @@ continuousConfig =
   pushUrlParser <*>
   pullUrlParser <*>
   maxBlobsPerRequestParser <*>
-  optional (option
-     auto
-     (long "hackage-limit" <> help "Debug flag to pull n packages" <>
-      metavar "INT"))
+  optional
+    (option
+       auto
+       (long "hackage-limit" <> help "Debug flag to pull n packages" <>
+        metavar "INT")) <*>
+  optional
+    (option
+       auto
+       (long "snapshots-limit" <> help "Debug flag to pull n snapshots" <>
+        metavar "INT"))
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -329,7 +336,7 @@ continuousPopulatePushCommand continuousConfig = do
                 ("There are " <> display (length newNames) <> " new snapshots.")
               pure newNames)
       for_
-        newNames
+        (maybe id take (continuousConfigSnapshotsLimit continuousConfig) (toList newNames))
         (\name -> do
            populateViaSnapshotTextName continuousConfig name
            withContinuousProcessDb
