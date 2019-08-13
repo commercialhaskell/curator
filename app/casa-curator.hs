@@ -142,6 +142,7 @@ data ContinuousConfig =
     , continuousConfigPushUrl :: PushUrl
     , continuousConfigPullUrl :: PullUrl
     , continuousConfigMaxBlobsPerRequest :: Int
+    , continuousConfigHackageLimit :: Maybe Int
     }
 
 continuousConfig :: Parser ContinuousConfig
@@ -155,7 +156,11 @@ continuousConfig =
   downloadConcurrencyParser <*>
   pushUrlParser <*>
   pullUrlParser <*>
-  maxBlobsPerRequestParser
+  maxBlobsPerRequestParser <*>
+  optional (option
+     auto
+     (long "hackage-limit" <> help "Debug flag to pull n packages" <>
+      metavar "INT"))
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -262,7 +267,11 @@ continuousPopulatePushCommand continuousConfig = do
               race_
                 (pooledForConcurrentlyN_
                    (continuousConfigConcurrentDownloads continuousConfig)
-                   (zip [0 :: Int ..] (M.toList rplis))
+                   (maybe
+                      id
+                      take
+                      (continuousConfigHackageLimit continuousConfig)
+                      (zip [0 :: Int ..] (M.toList rplis)))
                    (\(i, (hackageCabalId, rpli)) -> do
                       logSticky
                         ("[" <> display i <> "/" <> display count <> "] " <>
