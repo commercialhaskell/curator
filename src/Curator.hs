@@ -12,5 +12,6 @@ import Curator.Snapshot as Export
 import Curator.Types (Target(..))
 import Curator.Unpack as Export
 import Curator.UploadDocs as Export
+import Curator.ApplyPvpRules as Export
 import Pantry as Export
 import RIO as Export

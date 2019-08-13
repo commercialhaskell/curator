@@ -43,8 +43,8 @@ options =
                  parseTarget
       addCommand "snapshot-incomplete"
                  "Generate incomplete snapshot"
-                 (const snapshotIncomplete)
-                 (pure ())
+                 snapshotIncomplete
+                 parseTarget
       addCommand "snapshot"
                  "Complete locations in incomplete snapshot"
                  (const snapshot)
@@ -151,12 +151,17 @@ constraints target =
       logInfo "Writing constraints.yaml"
       liftIO $ encodeFile constraintsFilename stackageConstraints
 
-snapshotIncomplete :: RIO PantryApp ()
-snapshotIncomplete = do
+snapshotIncomplete :: Target -> RIO PantryApp ()
+snapshotIncomplete target = do
   logInfo "Writing snapshot-incomplete.yaml"
-  decodeFileThrow constraintsFilename >>= \constraints' ->
-    makeSnapshot constraints' >>=
-    liftIO . encodeFile "snapshot-incomplete.yaml"
+  decodeFileThrow constraintsFilename >>= \constraintsNoLts -> do
+    constraints' <-
+      case target of
+        TargetLts major minor
+          | minor > 0 -> applyPvpRules constraintsNoLts major (minor - 1)
+        _ -> pure constraintsNoLts
+    snapshot <- makeSnapshot constraints'
+    liftIO $ encodeFile "snapshot-incomplete.yaml" snapshot
 
 snapshot :: RIO PantryApp ()
 snapshot = do
