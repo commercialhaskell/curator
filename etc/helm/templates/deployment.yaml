@@ -1,5 +1,5 @@
-{{- $pull-url := printf "http://$(%s):$(%s)/v1/pull" .Values.host-env-var .Values.port-env-var -}}
-{{- $push-url := printf "http://$(%s):$(%s)/v1/push" .Values.host-env-var .Values.auth-env-var -}}
+{{- $pull-url := printf "http://$(%s):$(%s)/v1/pull" .Values.hostEnvVar .Values.portEnvVar -}}
+{{- $push-url := printf "http://$(%s):$(%s)/v1/push" .Values.hostEnvVar .Values.authEnvVar -}}
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
