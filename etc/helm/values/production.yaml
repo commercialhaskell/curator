@@ -12,5 +12,5 @@ curatorResources:
 
 registrySecretName: registry-key
 
-download-concurrency: "10"
-sleep-for: 15
+downloadConcurrency: "10"
+sleepFor: 15

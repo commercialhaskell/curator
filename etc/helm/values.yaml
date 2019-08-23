@@ -7,4 +7,4 @@ service:
 
 resources: {}
 
-sqlite-file: "./db.sqlite"
+sqliteFile: "./db.sqlite"

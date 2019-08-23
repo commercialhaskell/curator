@@ -21,7 +21,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["casa-curator"]
           workingDir: /app
-          args: ["continuous-populate-push", "--sleep-for",{{ .Values.sleep-for | quote }},"--sqlite-file",{{ .Values.sqlite-file | quote }},"--download-concurrency",{{ .Values.download-concurrency | quote }},"--push-url",{{ $pushUrl | quote }},"--pull-url",{{ $pullUrl | quote }}]
+          args: ["continuous-populate-push", "--sleep-for",{{ .Values.sleepFor | quote }},"--sqlite-file",{{ .Values.sqliteFile | quote }},"--download-concurrency",{{ .Values.downloadConcurrency | quote }},"--push-url",{{ $pushUrl | quote }},"--pull-url",{{ $pullUrl | quote }}]
           resources:
 {{ toYaml .Values.curatorResources.resources | indent 12 }}
     {{- with .Values.nodeSelector }}
