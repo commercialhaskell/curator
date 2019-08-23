@@ -1,0 +1,10 @@
+image:
+  pullPolicy: Always
+  minReadySeconds: 5
+
+service:
+  type: ClusterIP
+
+resources: {}
+
+sqlite-file: "./db.sqlite"

@@ -1,0 +1,38 @@
+{{- $pull-url := printf "http://$(%s):$(%s)/v1/pull" .Values.host-env-var .Values.port-env-var -}}
+{{- $push-url := printf "http://$(%s):$(%s)/v1/push" .Values.host-env-var .Values.auth-env-var -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.image.replicas }}
+  minReadySeconds: 30
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app }}
+        release: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.registrySecretName }}
+      containers:
+        - name: casa-curator
+          image: {{ .Values.image.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["casa-curator"]
+          workingDir: /app
+          args: ["continuous-populate-push", "--sleep-for",{{ .Values.sleep-for | quote }},"--sqlite-file",{{ .Values.sqlite-file | quote }},"--download-concurrency",{{ .Values.download-concurrency | quote }},"--push-url",{{ $push-url | quote }},"--pull-url",{{ $pull-url | quote }}]
+          resources:
+{{ toYaml .Values.curatorResources.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
