@@ -40,6 +40,7 @@ library:
 
 executables:
   curator:
+    ghc-options: -threaded
     source-dirs: app
     main: Main.hs
     dependencies:
