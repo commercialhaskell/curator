@@ -15,10 +15,17 @@ spec:
     spec:
       imagePullSecrets:
         - name: {{ .Values.registrySecretName }}
+      volumes:
+        - name: sqlite-volume
+          awsElasticBlockStore:
+            volumeID: {{ .Values.volumeId }}
       containers:
         - name: casa-curator
           image: {{ .Values.image.image }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+          - mountPath: /app/db
+            name: sqlite-volume
           command: ["casa-curator"]
           workingDir: /app
           args: ["continuous-populate-push", "--sleep-for",{{ .Values.sleepFor | quote }},"--sqlite-file",{{ .Values.sqliteFile | quote }},"--download-concurrency",{{ .Values.downloadConcurrency | quote }},"--push-url",{{ $pushUrl | quote }},"--pull-url",{{ $pullUrl | quote }}]

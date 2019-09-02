@@ -6,5 +6,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     wget -qO- https://get.haskellstack.org/ | sh -x && \
     unset DEBIAN_FRONTEND
 
+RUN mkdir --parents /app/db
 COPY _artifacts/casa-curator /usr/local/bin/casa-curator
 COPY _artifacts/curator /usr/local/bin/curator
