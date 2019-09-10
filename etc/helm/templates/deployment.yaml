@@ -18,7 +18,7 @@ spec:
       volumes:
         - name: sqlite-volume
           persistentVolumeClaim:
-            claimName: simple-ebs
+            claimName: curator-simple-ebs
       containers:
         - name: casa-curator
           image: {{ .Values.image.image }}
