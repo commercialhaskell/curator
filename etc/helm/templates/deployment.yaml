@@ -17,9 +17,8 @@ spec:
         - name: {{ .Values.registrySecretName }}
       volumes:
         - name: sqlite-volume
-          awsElasticBlockStore:
-            volumeID: {{ .Values.volumeId }}
-            fsType: ext4
+          persistentVolumeClaim:
+            claimName: simple-ebs
       containers:
         - name: casa-curator
           image: {{ .Values.image.image }}
