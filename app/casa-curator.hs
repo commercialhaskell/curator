@@ -44,6 +44,7 @@ import           Data.Time
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Database.Persist.TH
+import           Network.HTTP.Client
 import           Network.HTTP.Simple
 import           Options.Applicative
 import           Options.Applicative.Simple
@@ -283,17 +284,24 @@ continuousPopulatePushCommand continuousConfig = do
                       logSticky
                         ("[" <> display i <> "/" <> display count <> "] " <>
                          display rpli)
+                      let logit :: Exception e => e -> RIO PantryApp ()
+                          logit e =
+                            logStickyDone
+                              ("[" <> display i <> "/" <> display count <> "] " <>
+                               display (T.pack (displayException e)))
                       catch
-                        (void (loadPackageRaw rpli))
-                        (\e ->
-                           let logit =
-                                 logStickyDone
-                                   ("[" <> display i <> "/" <> display count <>
-                                    "] " <>
-                                    display e)
-                            in case e of
-                                 TreeWithoutCabalFile {} -> logit
-                                 _ -> logit)
+                        (catch
+                           (void (loadPackageRaw rpli))
+                           (\e ->
+                              let
+                               in case e of
+                                    TreeWithoutCabalFile {} -> logit e
+                                    _ -> logit e))
+                        (\e@(HttpExceptionRequest _ statusCodeException) ->
+                           case statusCodeException of
+                             StatusCodeException r _ | getResponseStatusCode r == 403 ->
+                               logit e
+                             _ -> throwM e)
                       writeChan hackageCabalIdChan hackageCabalId))
                 (liftIO
                    (let loop mlastHackageCabalId =
@@ -336,7 +344,11 @@ continuousPopulatePushCommand continuousConfig = do
                 ("There are " <> display (length newNames) <> " new snapshots.")
               pure newNames)
       for_
-        (maybe id take (continuousConfigSnapshotsLimit continuousConfig) (toList newNames))
+        (maybe
+           id
+           take
+           (continuousConfigSnapshotsLimit continuousConfig)
+           (toList newNames))
         (\name -> do
            populateViaSnapshotTextName continuousConfig name
            withContinuousProcessDb
