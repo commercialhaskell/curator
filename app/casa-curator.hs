@@ -289,19 +289,26 @@ continuousPopulatePushCommand continuousConfig = do
                             logStickyDone
                               ("[" <> display i <> "/" <> display count <> "] " <>
                                display (T.pack (displayException e)))
-                      catch
-                        (catch
-                           (void (loadPackageRaw rpli))
-                           (\e ->
-                              let
-                               in case e of
-                                    TreeWithoutCabalFile {} -> logit e
-                                    _ -> logit e))
-                        (\e@(HttpExceptionRequest _ statusCodeException) ->
-                           case statusCodeException of
-                             StatusCodeException r _ | getResponseStatusCode r == 403 ->
-                               logit e
-                             _ -> throwM e)
+                      let attempt =
+                            catch
+                              (catch
+                                 (void (loadPackageRaw rpli))
+                                 (\e ->
+                                    let
+                                     in case e of
+                                          TreeWithoutCabalFile {} -> logit e
+                                          _ -> logit e))
+                              (\e@(HttpExceptionRequest _ statusCodeException) ->
+                                 case statusCodeException of
+                                   ResponseTimeout -> do
+                                     logit e
+                                     logSticky "Retrying ..."
+                                     threadDelay (1000 * 1000)
+                                     attempt
+                                   StatusCodeException r _
+                                     | getResponseStatusCode r == 403 -> logit e
+                                   _ -> throwM e)
+                      attempt
                       writeChan hackageCabalIdChan hackageCabalId))
                 (liftIO
                    (let loop mlastHackageCabalId =
@@ -484,13 +491,25 @@ stickyProgress total = go (0 :: Int)
 -- | Download all snapshots from stackage. The results are
 -- paginated. We want everything, so we just keep increasing the page
 -- index until we get a null result.
-downloadAllSnapshotTextNames :: MonadIO m => m (Set Text)
-downloadAllSnapshotTextNames = liftIO (go 1 mempty)
+downloadAllSnapshotTextNames :: (HasLogFunc env) => RIO env (Set Text)
+downloadAllSnapshotTextNames = go 1 mempty
   where
     go page acc = do
       request <-
         parseRequest ("https://www.stackage.org/snapshots?page=" ++ show page)
-      response :: Response Aeson.Value <- httpJSON request
+      response :: Response Aeson.Value <-
+        let attempt =
+              catch
+                (httpJSON request)
+                (\e@(HttpExceptionRequest _ statusCodeException) ->
+                   case statusCodeException of
+                     ResponseTimeout -> do
+                       logStickyDone ("Timeout: " <> fromString (show e))
+                       logSticky "Retrying ..."
+                       threadDelay (1000 * 1000)
+                       attempt
+                     _ -> throwM e)
+         in attempt
       case getResponseStatusCode response of
         200 ->
           case Aeson.parseEither snapshotsParser (getResponseBody response) of
