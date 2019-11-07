@@ -279,7 +279,7 @@ continuousPopulatePushCommand continuousConfig = do
                       id
                       take
                       (continuousConfigHackageLimit continuousConfig)
-                      (zip [0 :: Int ..] (M.toList rplis)))
+                      (zip [1 :: Int ..] (M.toList rplis)))
                    (\(i, (hackageCabalId, rpli)) -> do
                       logSticky
                         ("[" <> display i <> "/" <> display count <> "] " <>
@@ -554,7 +554,7 @@ populateFromRawSnapshot concurrentDownloads rawSnapshot = do
   let total = length (rsPackages rawSnapshot)
   pooledForConcurrentlyN_
     concurrentDownloads
-    (zip [0 :: Int ..] (map rspLocation (M.elems (rsPackages rawSnapshot))))
+    (zip [1 :: Int ..] (map rspLocation (M.elems (rsPackages rawSnapshot))))
     (\(i, rawPackageLocationImmutable) -> do
        logSticky
          ("Loading package: " <> display i <> "/" <> display total <> ": " <>
