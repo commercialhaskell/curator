@@ -446,18 +446,23 @@ pushCommand config = do
     (pushConfigConcurrentDownloads config)
     (pullUrlString (pushConfigPullUrl config))
     (pushConfigMaxBlobsPerRequest config)
-    (runPantryStorage
-       (do count <- allBlobsCount mlastPushedBlobId
-           if count > 0
-             then blobsSink
-                    (pushUrlString (pushConfigPushUrl config))
-                    (allBlobsSource mlastPushedBlobId .|
-                     CL.mapM
-                       (\(blobId, blob) -> do
-                          liftIO (writeIORef mlastBlobIdRef (Just blobId))
-                          pure blob) .|
-                     stickyProgress count)
-             else logInfo "There are no new blobs to push since last time."))
+    (do blobs <-
+          runPantryStorage
+            (do count <- allBlobsCount mlastPushedBlobId
+                if count > 0
+                  then blobsSink
+                         (pushUrlString (pushConfigPushUrl config))
+                         (allBlobsSource mlastPushedBlobId .|
+                          CL.mapM
+                            (\(blobId, blob) -> do
+                               liftIO (writeIORef mlastBlobIdRef (Just blobId))
+                               pure blob) .|
+                          stickyProgress count)
+                  else pure ()
+                pure count)
+        when
+          (blobs == 0)
+          (logInfo "There are no new blobs to push since last time."))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
   case mlastBlobId of
     Nothing -> pure ()
