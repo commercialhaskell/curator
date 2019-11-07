@@ -48,7 +48,8 @@ import           Network.HTTP.Client
 import           Network.HTTP.Simple
 import           Options.Applicative
 import           Options.Applicative.Simple
-import           Pantry
+import           Pantry hiding (runPantryAppWith)
+import qualified Pantry as Pantry
 import           Pantry.Internal.Stackage hiding (migrateAll)
 import           RIO
 import           RIO.Orphans
@@ -97,6 +98,7 @@ data PushConfig =
     , pushConfigPushUrl :: PushUrl
     , pushConfigPullUrl :: PullUrl
     , pushConfigMaxBlobsPerRequest :: Int
+    , pushConfigVerbose :: !Bool
     }
   deriving (Show)
 
@@ -107,7 +109,7 @@ pushConfigParser =
   downloadConcurrencyParser <*>
   pushUrlParser <*>
   pullUrlParser <*>
-  maxBlobsPerRequestParser
+  maxBlobsPerRequestParser <*> verboseParser
 
 pushUrlParser :: Parser PushUrl
 pushUrlParser =
@@ -122,6 +124,7 @@ data PopulateConfig =
     { populateConfigSnapshot :: Unresolved RawSnapshotLocation
     , populateConfigConcurrentDownloads :: Int
     , populateConfigPullUrl :: PullUrl
+    , populateConfigVerbose :: !Bool
     }
 
 -- | Command-line config.
@@ -133,7 +136,7 @@ populateConfigParser =
     (strOption
        (long "snapshot" <> metavar "SNAPSHOT" <>
         help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
-  downloadConcurrencyParser <*> pullUrlParser
+  downloadConcurrencyParser <*> pullUrlParser <*> verboseParser
 
 data ContinuousConfig =
   ContinuousConfig
@@ -145,7 +148,11 @@ data ContinuousConfig =
     , continuousConfigMaxBlobsPerRequest :: Int
     , continuousConfigHackageLimit :: Maybe Int
     , continuousConfigSnapshotsLimit :: Maybe Int
+    , continuousConfigVerbose :: Bool
     }
+
+verboseParser :: Parser Bool
+verboseParser = flag False True (long "verbose" <> short 'v' <> help "Verbose output")
 
 continuousConfig :: Parser ContinuousConfig
 continuousConfig =
@@ -168,7 +175,7 @@ continuousConfig =
     (option
        auto
        (long "snapshots-limit" <> help "Debug flag to pull n snapshots" <>
-        metavar "INT"))
+        metavar "INT")) <*> verboseParser
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -248,6 +255,7 @@ continuousPopulatePushCommand continuousConfig = do
                 (selectFirst [] [])))
       newHackagePackages <-
         runPantryAppWith
+          (continuousConfigVerbose continuousConfig)
           (continuousConfigConcurrentDownloads continuousConfig)
           (pullUrlString (continuousConfigPullUrl continuousConfig))
           (continuousConfigMaxBlobsPerRequest continuousConfig)
@@ -370,6 +378,7 @@ continuousPopulatePushCommand continuousConfig = do
           , pushConfigMaxBlobsPerRequest =
               continuousConfigMaxBlobsPerRequest continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
+          , pushConfigVerbose = continuousConfigVerbose continuousConfig
           }
 
 -- | Record that we've populated pantry with a snapshot.
@@ -385,6 +394,7 @@ insertLoadedSnapshot name = do
 populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
 populateViaSnapshotTextName continuousConfig snapshotTextName =
   runPantryAppWith
+    (continuousConfigVerbose continuousConfig)
     (continuousConfigConcurrentDownloads continuousConfig)
     (pullUrlString (continuousConfigPullUrl continuousConfig))
     (continuousConfigMaxBlobsPerRequest continuousConfig)
@@ -411,6 +421,7 @@ withContinuousProcessDb file =
 statusCommand :: IO ()
 statusCommand =
   runPantryAppWith
+    False
     0
     defaultCasaPullURL
     defaultCasaMaxPerRequest
@@ -419,9 +430,10 @@ statusCommand =
            lift (logInfo ("Blobs in database: " <> display count))))
 
 -- | Populate the pantry database.
-populateCommand :: MonadIO m => PopulateConfig -> m ()
+populateCommand :: MonadUnliftIO m => PopulateConfig -> m ()
 populateCommand populateConfig =
   runPantryAppWith
+    (populateConfigVerbose populateConfig)
     (populateConfigConcurrentDownloads populateConfig)
     (pullUrlString (populateConfigPullUrl populateConfig))
     defaultCasaMaxPerRequest
@@ -434,7 +446,7 @@ populateCommand populateConfig =
     unresoledRawSnapshotLocation = populateConfigSnapshot populateConfig
 
 -- | Start pushing.
-pushCommand :: MonadIO m => PushConfig -> m ()
+pushCommand :: MonadUnliftIO m => PushConfig -> m ()
 pushCommand config = do
   mlastBlobIdRef <- liftIO (newIORef Nothing)
   mlastPushedBlobId :: Maybe BlobId <-
@@ -443,6 +455,7 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryAppWith
+    (pushConfigVerbose config)
     (pushConfigConcurrentDownloads config)
     (pullUrlString (pushConfigPullUrl config))
     (pushConfigMaxBlobsPerRequest config)
@@ -573,10 +586,31 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
   loadSnapshot snapshotLocation
 
-runPantryStorage ::
-     (MonadReader PantryApp m, MonadUnliftIO m)
-  => ReaderT SqlBackend (RIO PantryStorage) b
-  -> m b
+--------------------------------------------------------------------------------
+-- Runners
+
+-- | Our wrapper around Pantry's runPantryAppWith, to use our own
+-- logger.
+runPantryAppWith :: MonadUnliftIO m => Bool -> Int -> String -> Int -> RIO PantryApp a -> m a
+runPantryAppWith verbose maxConnCount casaPullURL casaMaxPerRequest f = do
+  options <- logOptionsHandle stdout verbose
+  withLogFunc
+    (setOptions options)
+    (\logFunc ->
+       Pantry.runPantryAppWith
+         maxConnCount
+         casaPullURL
+         casaMaxPerRequest
+         (local (set logFuncL logFunc) f))
+  where
+    setOptions =
+      setLogUseTime verbose .
+      setLogUseColor False .
+      setLogUseLoc verbose .
+      setLogTerminal False
+
+-- | Run database access inside Pantry's database.
+runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO PantryApp a
 runPantryStorage action = do
   pantryApp <- ask
   storage <- fmap (pcStorage . view pantryConfigL) ask
