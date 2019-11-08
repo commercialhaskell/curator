@@ -42,7 +42,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time
 import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Persist.Sqlite hiding (LogFunc)
 import           Database.Persist.TH
 import           Network.HTTP.Client
 import           Network.HTTP.Simple
@@ -98,7 +98,6 @@ data PushConfig =
     , pushConfigPushUrl :: PushUrl
     , pushConfigPullUrl :: PullUrl
     , pushConfigMaxBlobsPerRequest :: Int
-    , pushConfigVerbose :: !Bool
     }
   deriving (Show)
 
@@ -109,7 +108,7 @@ pushConfigParser =
   downloadConcurrencyParser <*>
   pushUrlParser <*>
   pullUrlParser <*>
-  maxBlobsPerRequestParser <*> verboseParser
+  maxBlobsPerRequestParser
 
 pushUrlParser :: Parser PushUrl
 pushUrlParser =
@@ -124,7 +123,6 @@ data PopulateConfig =
     { populateConfigSnapshot :: Unresolved RawSnapshotLocation
     , populateConfigConcurrentDownloads :: Int
     , populateConfigPullUrl :: PullUrl
-    , populateConfigVerbose :: !Bool
     }
 
 -- | Command-line config.
@@ -136,7 +134,7 @@ populateConfigParser =
     (strOption
        (long "snapshot" <> metavar "SNAPSHOT" <>
         help "Snapshot in usual Stack format (lts-1.1, nightly-...)")) <*>
-  downloadConcurrencyParser <*> pullUrlParser <*> verboseParser
+  downloadConcurrencyParser <*> pullUrlParser
 
 data ContinuousConfig =
   ContinuousConfig
@@ -148,7 +146,6 @@ data ContinuousConfig =
     , continuousConfigMaxBlobsPerRequest :: Int
     , continuousConfigHackageLimit :: Maybe Int
     , continuousConfigSnapshotsLimit :: Maybe Int
-    , continuousConfigVerbose :: Bool
     }
 
 verboseParser :: Parser Bool
@@ -175,7 +172,7 @@ continuousConfig =
     (option
        auto
        (long "snapshots-limit" <> help "Debug flag to pull n snapshots" <>
-        metavar "INT")) <*> verboseParser
+        metavar "INT"))
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -202,15 +199,22 @@ maxBlobsPerRequestParser =
      metavar "INT" <>
      value defaultCasaMaxPerRequest)
 
+data App = App
+  { logFunc :: LogFunc
+  }
+
+instance HasLogFunc App where
+  logFuncL = lens logFunc (\x y -> x { logFunc = y })
+
 -- | Main entry point.
 main :: IO ()
 main = do
-  ((), runCmd) <-
+  (verbose, runCmd) <-
     simpleOptions
       "0"
       "casa-curator"
       "casa-curator"
-      (pure ())
+      verboseParser
       (do addCommand
             "push"
             "Push ALL blobs to Casa"
@@ -231,9 +235,10 @@ main = do
             "Poll stackage for new snapshots, \"populate\" then \"push\", repeatedly"
             continuousPopulatePushCommand
             continuousConfig)
-  runCmd
+  opts <- getLogOptions verbose
+  withLogFunc opts (\logFunc -> runRIO (App logFunc) runCmd)
 
-continuousPopulatePushCommand :: ContinuousConfig -> IO ()
+continuousPopulatePushCommand :: HasLogFunc env => ContinuousConfig -> RIO env ()
 continuousPopulatePushCommand continuousConfig = do
   runSqlite
     (continuousConfigSqliteFile continuousConfig)
@@ -268,27 +273,24 @@ continuousPopulatePushCommand continuousConfig = do
           , pushConfigMaxBlobsPerRequest =
               continuousConfigMaxBlobsPerRequest continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
-          , pushConfigVerbose = continuousConfigVerbose continuousConfig
           }
 
-getNewSnapshots :: MonadIO m => ContinuousConfig -> m (Set Text)
-getNewSnapshots continuousConfig =
-  runSimpleApp
-    (do logSticky "Downloading snapshots from Stackage ..."
-        availableNames <- downloadAllSnapshotTextNames
-        logStickyDone "Downloaded snapshots from Stackage."
-        loadedSnapshots <-
-          withContinuousProcessDb
-            (continuousConfigSqliteFile continuousConfig)
-            (selectList [] [])
-        let loadedNames =
-              Set.fromList
-                (map (snapshotLoadedName . entityVal) loadedSnapshots)
-            newNames = Set.difference availableNames loadedNames
-        logInfo ("There are " <> display (length newNames) <> " new snapshots.")
-        pure newNames)
+getNewSnapshots :: HasLogFunc env => ContinuousConfig -> RIO env (Set Text)
+getNewSnapshots continuousConfig = do
+  logSticky "Downloading snapshots from Stackage ..."
+  availableNames <- downloadAllSnapshotTextNames
+  logStickyDone "Downloaded snapshots from Stackage."
+  loadedSnapshots <-
+    withContinuousProcessDb
+      (continuousConfigSqliteFile continuousConfig)
+      (selectList [] [])
+  let loadedNames =
+        Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
+      newNames = Set.difference availableNames loadedNames
+  logInfo ("There are " <> display (length newNames) <> " new snapshots.")
+  pure newNames
 
-getNewHackagePackages :: MonadUnliftIO m => ContinuousConfig -> m ()
+getNewHackagePackages :: HasLogFunc env => ContinuousConfig -> RIO env ()
 getNewHackagePackages continuousConfig = do
   mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
     fmap
@@ -298,7 +300,6 @@ getNewHackagePackages continuousConfig = do
             (continuousConfigSqliteFile continuousConfig)
             (selectFirst [] [])))
   runPantryAppWith
-    (continuousConfigVerbose continuousConfig)
     (continuousConfigConcurrentDownloads continuousConfig)
     (pullUrlString (continuousConfigPullUrl continuousConfig))
     (continuousConfigMaxBlobsPerRequest continuousConfig)
@@ -392,10 +393,9 @@ insertLoadedSnapshot name = do
           {snapshotLoadedName = name, snapshotLoadedTimestamp = now}))
 
 -- | Populate pantry via a text name of a snapshot.
-populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
+populateViaSnapshotTextName :: HasLogFunc env => ContinuousConfig -> Text -> RIO env ()
 populateViaSnapshotTextName continuousConfig snapshotTextName =
   runPantryAppWith
-    (continuousConfigVerbose continuousConfig)
     (continuousConfigConcurrentDownloads continuousConfig)
     (pullUrlString (continuousConfigPullUrl continuousConfig))
     (continuousConfigMaxBlobsPerRequest continuousConfig)
@@ -419,10 +419,9 @@ withContinuousProcessDb file =
   liftIO . runSqlite file
 
 -- | Print a simple status of the database.
-statusCommand :: IO ()
+statusCommand :: HasLogFunc env => RIO env ()
 statusCommand =
   runPantryAppWith
-    False
     0
     defaultCasaPullURL
     defaultCasaMaxPerRequest
@@ -431,10 +430,9 @@ statusCommand =
            lift (logInfo ("Blobs in database: " <> display count))))
 
 -- | Populate the pantry database.
-populateCommand :: MonadUnliftIO m => PopulateConfig -> m ()
+populateCommand :: HasLogFunc env => PopulateConfig -> RIO env ()
 populateCommand populateConfig =
   runPantryAppWith
-    (populateConfigVerbose populateConfig)
     (populateConfigConcurrentDownloads populateConfig)
     (pullUrlString (populateConfigPullUrl populateConfig))
     defaultCasaMaxPerRequest
@@ -447,7 +445,7 @@ populateCommand populateConfig =
     unresoledRawSnapshotLocation = populateConfigSnapshot populateConfig
 
 -- | Start pushing.
-pushCommand :: MonadUnliftIO m => PushConfig -> m ()
+pushCommand :: HasLogFunc env => PushConfig -> RIO env ()
 pushCommand config = do
   mlastBlobIdRef <- liftIO (newIORef Nothing)
   mlastPushedBlobId :: Maybe BlobId <-
@@ -456,7 +454,6 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryAppWith
-    (pushConfigVerbose config)
     (pushConfigConcurrentDownloads config)
     (pullUrlString (pushConfigPullUrl config))
     (pushConfigMaxBlobsPerRequest config)
@@ -590,25 +587,26 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
 --------------------------------------------------------------------------------
 -- Runners
 
--- | Our wrapper around Pantry's runPantryAppWith, to use our own
--- logger.
-runPantryAppWith :: MonadUnliftIO m => Bool -> Int -> String -> Int -> RIO PantryApp a -> m a
-runPantryAppWith verbose maxConnCount casaPullURL casaMaxPerRequest f = do
-  options <- logOptionsHandle stderr verbose
-  withLogFunc
-    (setOptions options)
-    (\logFunc ->
-       Pantry.runPantryAppWith
-         maxConnCount
-         casaPullURL
-         casaMaxPerRequest
-         (local (set logFuncL logFunc) f))
+-- | Get the log func used by everything in the app.
+getLogOptions :: MonadIO f => Bool -> f LogOptions
+getLogOptions verbose = fmap setOptions (logOptionsHandle stderr verbose)
   where
     setOptions =
       setLogUseTime verbose .
       setLogUseColor False .
-      setLogUseLoc verbose .
+      setLogUseLoc False .
       setLogTerminal False
+
+-- | Our wrapper around Pantry's runPantryAppWith, to use our own
+-- logger.
+runPantryAppWith :: HasLogFunc env => Int -> String -> Int -> RIO PantryApp a -> RIO env a
+runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
+  logFunc <- asks (view logFuncL)
+  Pantry.runPantryAppWith
+    maxConnCount
+    casaPullURL
+    casaMaxPerRequest
+    (local (set logFuncL logFunc) f)
 
 -- | Run database access inside Pantry's database.
 runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO PantryApp a
