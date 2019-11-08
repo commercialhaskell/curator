@@ -355,7 +355,8 @@ downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
                     (do deleteWhere ([] :: [Filter LastDownloaded])
                         insert_
                           (LastDownloaded
-                             {lastDownloadedHackageCabalId = hackageCabalId}))))
+                             {lastDownloadedHackageCabalId = hackageCabalId}))
+                  logInfo ("Inserted package " <> display rpli)))
            (\e ->
               let
                in case e of
