@@ -594,7 +594,7 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
 -- logger.
 runPantryAppWith :: MonadUnliftIO m => Bool -> Int -> String -> Int -> RIO PantryApp a -> m a
 runPantryAppWith verbose maxConnCount casaPullURL casaMaxPerRequest f = do
-  options <- logOptionsHandle stdout verbose
+  options <- logOptionsHandle stderr verbose
   withLogFunc
     (setOptions options)
     (\logFunc ->
