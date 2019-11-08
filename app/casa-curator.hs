@@ -246,118 +246,8 @@ continuousPopulatePushCommand continuousConfig = do
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
-      mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
-        fmap
-          (fmap (lastDownloadedHackageCabalId . entityVal))
-          (liftIO
-             (withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (selectFirst [] [])))
-      newHackagePackages <-
-        runPantryAppWith
-          (continuousConfigVerbose continuousConfig)
-          (continuousConfigConcurrentDownloads continuousConfig)
-          (pullUrlString (continuousConfigPullUrl continuousConfig))
-          (continuousConfigMaxBlobsPerRequest continuousConfig)
-          (do logInfo "Updating Hackage index ..."
-              forceUpdateHackageIndex Nothing
-              logInfo "Hackage index updated."
-              count <-
-                runPantryStorage
-                  (allHackageCabalCount mlastDownloadedHackageCabal)
-              logInfo
-                ("Will download " <> display count <>
-                 " Hackage cabal revisions.")
-              logInfo
-                ("Pulling from database ... " <>
-                 (case mlastDownloadedHackageCabal of
-                    Nothing -> ""
-                    Just sqlKey ->
-                      "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
-              rplis <-
-                runPantryStorage
-                  (allHackageCabalRawPackageLocations
-                     mlastDownloadedHackageCabal)
-              logInfo "Done. Loading packages ..."
-              hackageCabalIdChan <- newChan
-              race_
-                (pooledForConcurrentlyN_
-                   (continuousConfigConcurrentDownloads continuousConfig)
-                   (maybe
-                      id
-                      take
-                      (continuousConfigHackageLimit continuousConfig)
-                      (zip [1 :: Int ..] (M.toList rplis)))
-                   (\(i, (hackageCabalId, rpli)) -> do
-                      logSticky
-                        ("[" <> display i <> "/" <> display count <> "] " <>
-                         display rpli)
-                      let logit :: Exception e => e -> RIO PantryApp ()
-                          logit e =
-                            logStickyDone
-                              ("[" <> display i <> "/" <> display count <> "] " <>
-                               display (T.pack (displayException e)))
-                      let attempt =
-                            catch
-                              (catch
-                                 (void (loadPackageRaw rpli))
-                                 (\e ->
-                                    let
-                                     in case e of
-                                          TreeWithoutCabalFile {} -> logit e
-                                          _ -> logit e))
-                              (\e@(HttpExceptionRequest _ statusCodeException) ->
-                                 case statusCodeException of
-                                   ResponseTimeout -> do
-                                     logit e
-                                     logSticky "Retrying ..."
-                                     threadDelay (1000 * 1000)
-                                     attempt
-                                   StatusCodeException r _
-                                     | getResponseStatusCode r == 403 -> logit e
-                                   _ -> throwM e)
-                      attempt
-                      writeChan hackageCabalIdChan hackageCabalId))
-                (liftIO
-                   (let loop mlastHackageCabalId =
-                          forever
-                            (do hackageCabalId <- readChan hackageCabalIdChan
-                                let write =
-                                      withContinuousProcessDb
-                                        (continuousConfigSqliteFile
-                                           continuousConfig)
-                                        (do deleteWhere
-                                              ([] :: [Filter LastDownloaded])
-                                            insert_
-                                              (LastDownloaded
-                                                 { lastDownloadedHackageCabalId =
-                                                     hackageCabalId
-                                                 }))
-                                case mlastHackageCabalId of
-                                  Nothing -> write
-                                  Just lastHackageCabalId ->
-                                    if hackageCabalId > lastHackageCabalId
-                                      then write
-                                      else pure ()
-                                loop (Just hackageCabalId))
-                     in loop Nothing))
-              logStickyDone "Done downloading packages.")
-      newNames <-
-        runSimpleApp
-          (do logSticky "Downloading snapshots from Stackage ..."
-              availableNames <- downloadAllSnapshotTextNames
-              logStickyDone "Downloaded snapshots from Stackage."
-              loadedSnapshots <-
-                withContinuousProcessDb
-                  (continuousConfigSqliteFile continuousConfig)
-                  (selectList [] [])
-              let loadedNames =
-                    Set.fromList
-                      (map (snapshotLoadedName . entityVal) loadedSnapshots)
-                  newNames = Set.difference availableNames loadedNames
-              logInfo
-                ("There are " <> display (length newNames) <> " new snapshots.")
-              pure newNames)
+      newHackagePackages <- getNewHackagePackages continuousConfig
+      newNames <- getNewSnapshots continuousConfig
       for_
         (maybe
            id
@@ -380,6 +270,117 @@ continuousPopulatePushCommand continuousConfig = do
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           , pushConfigVerbose = continuousConfigVerbose continuousConfig
           }
+
+getNewSnapshots :: MonadIO m => ContinuousConfig -> m (Set Text)
+getNewSnapshots continuousConfig =
+  runSimpleApp
+    (do logSticky "Downloading snapshots from Stackage ..."
+        availableNames <- downloadAllSnapshotTextNames
+        logStickyDone "Downloaded snapshots from Stackage."
+        loadedSnapshots <-
+          withContinuousProcessDb
+            (continuousConfigSqliteFile continuousConfig)
+            (selectList [] [])
+        let loadedNames =
+              Set.fromList
+                (map (snapshotLoadedName . entityVal) loadedSnapshots)
+            newNames = Set.difference availableNames loadedNames
+        logInfo ("There are " <> display (length newNames) <> " new snapshots.")
+        pure newNames)
+
+getNewHackagePackages :: MonadUnliftIO m => ContinuousConfig -> m ()
+getNewHackagePackages continuousConfig = do
+  mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
+    fmap
+      (fmap (lastDownloadedHackageCabalId . entityVal))
+      (liftIO
+         (withContinuousProcessDb
+            (continuousConfigSqliteFile continuousConfig)
+            (selectFirst [] [])))
+  runPantryAppWith
+    (continuousConfigVerbose continuousConfig)
+    (continuousConfigConcurrentDownloads continuousConfig)
+    (pullUrlString (continuousConfigPullUrl continuousConfig))
+    (continuousConfigMaxBlobsPerRequest continuousConfig)
+    (do logInfo "Updating Hackage index ..."
+        forceUpdateHackageIndex Nothing
+        logInfo "Hackage index updated."
+        count <-
+          runPantryStorage (allHackageCabalCount mlastDownloadedHackageCabal)
+        logInfo
+          ("Will download " <> display count <> " Hackage cabal revisions.")
+        logInfo
+          ("Pulling from database ... " <>
+           (case mlastDownloadedHackageCabal of
+              Nothing -> ""
+              Just sqlKey ->
+                "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
+        rplis <-
+          runPantryStorage
+            (allHackageCabalRawPackageLocations mlastDownloadedHackageCabal)
+        logInfo "Done. Loading packages ..."
+        hackageCabalIdChan <- newChan
+        race_
+          (pooledForConcurrentlyN_
+             (continuousConfigConcurrentDownloads continuousConfig)
+             (maybe
+                id
+                take
+                (continuousConfigHackageLimit continuousConfig)
+                (zip [1 :: Int ..] (M.toList rplis)))
+             (\(i, (hackageCabalId, rpli)) -> do
+                logSticky
+                  ("[" <> display i <> "/" <> display count <> "] " <>
+                   display rpli)
+                let logit :: Exception e => e -> RIO PantryApp ()
+                    logit e =
+                      logStickyDone
+                        ("[" <> display i <> "/" <> display count <> "] " <>
+                         display (T.pack (displayException e)))
+                let attempt =
+                      catch
+                        (catch
+                           (void (loadPackageRaw rpli))
+                           (\e ->
+                              let
+                               in case e of
+                                    TreeWithoutCabalFile {} -> logit e
+                                    _ -> logit e))
+                        (\e@(HttpExceptionRequest _ statusCodeException) ->
+                           case statusCodeException of
+                             ResponseTimeout -> do
+                               logit e
+                               logSticky "Retrying ..."
+                               threadDelay (1000 * 1000)
+                               attempt
+                             StatusCodeException r _
+                               | getResponseStatusCode r == 403 -> logit e
+                             _ -> throwM e)
+                attempt
+                writeChan hackageCabalIdChan hackageCabalId))
+          (liftIO
+             (let loop mlastHackageCabalId =
+                    forever
+                      (do hackageCabalId <- readChan hackageCabalIdChan
+                          let write =
+                                withContinuousProcessDb
+                                  (continuousConfigSqliteFile continuousConfig)
+                                  (do deleteWhere
+                                        ([] :: [Filter LastDownloaded])
+                                      insert_
+                                        (LastDownloaded
+                                           { lastDownloadedHackageCabalId =
+                                               hackageCabalId
+                                           }))
+                          case mlastHackageCabalId of
+                            Nothing -> write
+                            Just lastHackageCabalId ->
+                              if hackageCabalId > lastHackageCabalId
+                                then write
+                                else pure ()
+                          loop (Just hackageCabalId))
+               in loop Nothing))
+        logStickyDone "Done downloading packages.")
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
