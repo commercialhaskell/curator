@@ -42,13 +42,14 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time
 import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Persist.Sqlite hiding (LogFunc)
 import           Database.Persist.TH
 import           Network.HTTP.Client
 import           Network.HTTP.Simple
 import           Options.Applicative
 import           Options.Applicative.Simple
-import           Pantry
+import           Pantry hiding (runPantryAppWith)
+import qualified Pantry as Pantry
 import           Pantry.Internal.Stackage hiding (migrateAll)
 import           RIO
 import           RIO.Orphans
@@ -145,7 +146,18 @@ data ContinuousConfig =
     , continuousConfigMaxBlobsPerRequest :: Int
     , continuousConfigHackageLimit :: Maybe Int
     , continuousConfigSnapshotsLimit :: Maybe Int
+    , continuousConfigResetPush :: Bool
+    , continuousConfigResetPull :: Bool
     }
+
+verboseParser :: Parser Bool
+verboseParser = flag False True (long "verbose" <> short 'v' <> help "Verbose output")
+
+resetPushParser :: Parser Bool
+resetPushParser = flag False True (long "reset-push" <> help "Reset push cache")
+
+resetPullParser :: Parser Bool
+resetPullParser = flag False True (long "reset-pull" <> help "Reset pull cache")
 
 continuousConfig :: Parser ContinuousConfig
 continuousConfig =
@@ -168,7 +180,8 @@ continuousConfig =
     (option
        auto
        (long "snapshots-limit" <> help "Debug flag to pull n snapshots" <>
-        metavar "INT"))
+        metavar "INT")) <*>
+  resetPushParser <*> resetPullParser
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -195,15 +208,22 @@ maxBlobsPerRequestParser =
      metavar "INT" <>
      value defaultCasaMaxPerRequest)
 
+data App = App
+  { logFunc :: LogFunc
+  }
+
+instance HasLogFunc App where
+  logFuncL = lens logFunc (\x y -> x { logFunc = y })
+
 -- | Main entry point.
 main :: IO ()
 main = do
-  ((), runCmd) <-
+  (verbose, runCmd) <-
     simpleOptions
       "0"
       "casa-curator"
       "casa-curator"
-      (pure ())
+      verboseParser
       (do addCommand
             "push"
             "Push ALL blobs to Casa"
@@ -224,132 +244,36 @@ main = do
             "Poll stackage for new snapshots, \"populate\" then \"push\", repeatedly"
             continuousPopulatePushCommand
             continuousConfig)
-  runCmd
+  opts <- getLogOptions verbose
+  withLogFunc opts (\logFunc -> runRIO (App logFunc) runCmd)
 
-continuousPopulatePushCommand :: ContinuousConfig -> IO ()
+continuousPopulatePushCommand :: HasLogFunc env => ContinuousConfig -> RIO env ()
 continuousPopulatePushCommand continuousConfig = do
   runSqlite
     (continuousConfigSqliteFile continuousConfig)
     (runMigration migrateAll)
   forever
-    (do pullAndPush
+    (do when
+          (continuousConfigResetPull continuousConfig)
+          (do logInfo "Resetting pull cache..."
+              withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (do deleteWhere ([] :: [Filter LastDownloaded])))
+        when
+          (continuousConfigResetPush continuousConfig)
+          (do logInfo "Resetting push cache..."
+              withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (do deleteWhere ([] :: [Filter LastPushed])))
+        pullAndPush
         delay)
   where
     delay =
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
-      mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
-        fmap
-          (fmap (lastDownloadedHackageCabalId . entityVal))
-          (liftIO
-             (withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (selectFirst [] [])))
-      newHackagePackages <-
-        runPantryAppWith
-          (continuousConfigConcurrentDownloads continuousConfig)
-          (pullUrlString (continuousConfigPullUrl continuousConfig))
-          (continuousConfigMaxBlobsPerRequest continuousConfig)
-          (do logInfo "Updating Hackage index ..."
-              forceUpdateHackageIndex Nothing
-              logInfo "Hackage index updated."
-              count <-
-                runPantryStorage
-                  (allHackageCabalCount mlastDownloadedHackageCabal)
-              logInfo
-                ("Will download " <> display count <>
-                 " Hackage cabal revisions.")
-              logInfo
-                ("Pulling from database ... " <>
-                 (case mlastDownloadedHackageCabal of
-                    Nothing -> ""
-                    Just sqlKey ->
-                      "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
-              rplis <-
-                runPantryStorage
-                  (allHackageCabalRawPackageLocations
-                     mlastDownloadedHackageCabal)
-              logInfo "Done. Loading packages ..."
-              hackageCabalIdChan <- newChan
-              race_
-                (pooledForConcurrentlyN_
-                   (continuousConfigConcurrentDownloads continuousConfig)
-                   (maybe
-                      id
-                      take
-                      (continuousConfigHackageLimit continuousConfig)
-                      (zip [0 :: Int ..] (M.toList rplis)))
-                   (\(i, (hackageCabalId, rpli)) -> do
-                      logSticky
-                        ("[" <> display i <> "/" <> display count <> "] " <>
-                         display rpli)
-                      let logit :: Exception e => e -> RIO PantryApp ()
-                          logit e =
-                            logStickyDone
-                              ("[" <> display i <> "/" <> display count <> "] " <>
-                               display (T.pack (displayException e)))
-                      let attempt =
-                            catch
-                              (catch
-                                 (void (loadPackageRaw rpli))
-                                 (\e ->
-                                    let
-                                     in case e of
-                                          TreeWithoutCabalFile {} -> logit e
-                                          _ -> logit e))
-                              (\e@(HttpExceptionRequest _ statusCodeException) ->
-                                 case statusCodeException of
-                                   ResponseTimeout -> do
-                                     logit e
-                                     logSticky "Retrying ..."
-                                     threadDelay (1000 * 1000)
-                                     attempt
-                                   StatusCodeException r _
-                                     | getResponseStatusCode r == 403 -> logit e
-                                   _ -> throwM e)
-                      attempt
-                      writeChan hackageCabalIdChan hackageCabalId))
-                (liftIO
-                   (let loop mlastHackageCabalId =
-                          forever
-                            (do hackageCabalId <- readChan hackageCabalIdChan
-                                let write =
-                                      withContinuousProcessDb
-                                        (continuousConfigSqliteFile
-                                           continuousConfig)
-                                        (do deleteWhere
-                                              ([] :: [Filter LastDownloaded])
-                                            insert_
-                                              (LastDownloaded
-                                                 { lastDownloadedHackageCabalId =
-                                                     hackageCabalId
-                                                 }))
-                                case mlastHackageCabalId of
-                                  Nothing -> write
-                                  Just lastHackageCabalId ->
-                                    if hackageCabalId > lastHackageCabalId
-                                      then write
-                                      else pure ()
-                                loop (Just hackageCabalId))
-                     in loop Nothing))
-              logStickyDone "Done downloading packages.")
-      newNames <-
-        runSimpleApp
-          (do logSticky "Downloading snapshots from Stackage ..."
-              availableNames <- downloadAllSnapshotTextNames
-              logStickyDone "Downloaded snapshots from Stackage."
-              loadedSnapshots <-
-                withContinuousProcessDb
-                  (continuousConfigSqliteFile continuousConfig)
-                  (selectList [] [])
-              let loadedNames =
-                    Set.fromList
-                      (map (snapshotLoadedName . entityVal) loadedSnapshots)
-                  newNames = Set.difference availableNames loadedNames
-              logInfo
-                ("There are " <> display (length newNames) <> " new snapshots.")
-              pure newNames)
+      newHackagePackages <- getNewHackagePackages continuousConfig
+      newNames <- getNewSnapshots continuousConfig
       for_
         (maybe
            id
@@ -372,6 +296,104 @@ continuousPopulatePushCommand continuousConfig = do
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           }
 
+getNewSnapshots :: HasLogFunc env => ContinuousConfig -> RIO env (Set Text)
+getNewSnapshots continuousConfig = do
+  logSticky "Downloading snapshots from Stackage ..."
+  availableNames <- downloadAllSnapshotTextNames
+  logStickyDone "Downloaded snapshots from Stackage."
+  loadedSnapshots <-
+    withContinuousProcessDb
+      (continuousConfigSqliteFile continuousConfig)
+      (selectList [] [])
+  let loadedNames =
+        Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
+      newNames = Set.difference availableNames loadedNames
+  logInfo ("There are " <> display (length newNames) <> " new snapshots.")
+  pure newNames
+
+getNewHackagePackages :: HasLogFunc env => ContinuousConfig -> RIO env ()
+getNewHackagePackages continuousConfig = do
+  mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
+    fmap
+      (fmap (lastDownloadedHackageCabalId . entityVal))
+      (liftIO
+         (withContinuousProcessDb
+            (continuousConfigSqliteFile continuousConfig)
+            (selectFirst [] [])))
+  runPantryAppWith
+    (continuousConfigConcurrentDownloads continuousConfig)
+    (pullUrlString (continuousConfigPullUrl continuousConfig))
+    (continuousConfigMaxBlobsPerRequest continuousConfig)
+    (do logInfo "Updating Hackage index ..."
+        forceUpdateHackageIndex Nothing
+        logInfo "Hackage index updated."
+        count <-
+          runPantryStorage (allHackageCabalCount mlastDownloadedHackageCabal)
+        logInfo
+          ("Will download " <> display count <> " Hackage cabal revisions.")
+        logInfo
+          ("Pulling from database ... " <>
+           (case mlastDownloadedHackageCabal of
+              Nothing -> ""
+              Just sqlKey ->
+                "(skipping past " <> display (fromSqlKey sqlKey) <> ")"))
+        rplis <-
+          runPantryStorage
+            (allHackageCabalRawPackageLocations mlastDownloadedHackageCabal)
+        logInfo "Done. Loading packages ..."
+        hackageCabalIdChan <- newChan
+        forM_
+          (maybe
+             id
+             take
+             (continuousConfigHackageLimit continuousConfig)
+             (zip [1 :: Int ..] (M.toList rplis)))
+          (downloadHackagePackage continuousConfig count)
+        logStickyDone "Done downloading packages.")
+
+downloadHackagePackage ::
+  (Display a2, Display a1) =>
+  ContinuousConfig
+  -> a1
+  -> (a2, (HackageCabalId, RawPackageLocationImmutable))
+  -> RIO PantryApp ()
+downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
+  logSticky ("[" <> display i <> "/" <> display count <> "] " <> display rpli)
+  attempt
+  where
+    logit :: Exception e => e -> RIO PantryApp ()
+    logit e =
+      logStickyDone
+        ("[" <> display i <> "/" <> display count <> "] " <>
+         display (T.pack (displayException e)))
+    attempt =
+      catch
+        (catch
+           (void
+              (do loadPackageRaw rpli
+                  withContinuousProcessDb
+                    (continuousConfigSqliteFile continuousConfig)
+                    (do deleteWhere ([] :: [Filter LastDownloaded])
+                        insert_
+                          (LastDownloaded
+                             {lastDownloadedHackageCabalId = hackageCabalId}))
+                  logInfo ("Inserted package " <> display rpli)))
+           (\e ->
+              let
+               in case e of
+                    TreeWithoutCabalFile {} -> logit e
+                    _ -> logit e))
+        (\e@(HttpExceptionRequest _ statusCodeException) ->
+           case statusCodeException of
+             ResponseTimeout -> do
+               logit e
+               logSticky "Retrying ..."
+               threadDelay (1000 * 1000)
+               attempt
+             StatusCodeException r _
+               | getResponseStatusCode r == 403 -> logit e
+             _ -> throwM e)
+
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
 insertLoadedSnapshot name = do
@@ -382,7 +404,7 @@ insertLoadedSnapshot name = do
           {snapshotLoadedName = name, snapshotLoadedTimestamp = now}))
 
 -- | Populate pantry via a text name of a snapshot.
-populateViaSnapshotTextName :: ContinuousConfig -> Text -> IO ()
+populateViaSnapshotTextName :: HasLogFunc env => ContinuousConfig -> Text -> RIO env ()
 populateViaSnapshotTextName continuousConfig snapshotTextName =
   runPantryAppWith
     (continuousConfigConcurrentDownloads continuousConfig)
@@ -408,7 +430,7 @@ withContinuousProcessDb file =
   liftIO . runSqlite file
 
 -- | Print a simple status of the database.
-statusCommand :: IO ()
+statusCommand :: HasLogFunc env => RIO env ()
 statusCommand =
   runPantryAppWith
     0
@@ -419,7 +441,7 @@ statusCommand =
            lift (logInfo ("Blobs in database: " <> display count))))
 
 -- | Populate the pantry database.
-populateCommand :: MonadIO m => PopulateConfig -> m ()
+populateCommand :: HasLogFunc env => PopulateConfig -> RIO env ()
 populateCommand populateConfig =
   runPantryAppWith
     (populateConfigConcurrentDownloads populateConfig)
@@ -434,7 +456,7 @@ populateCommand populateConfig =
     unresoledRawSnapshotLocation = populateConfigSnapshot populateConfig
 
 -- | Start pushing.
-pushCommand :: MonadIO m => PushConfig -> m ()
+pushCommand :: HasLogFunc env => PushConfig -> RIO env ()
 pushCommand config = do
   mlastBlobIdRef <- liftIO (newIORef Nothing)
   mlastPushedBlobId :: Maybe BlobId <-
@@ -443,22 +465,26 @@ pushCommand config = do
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
   runPantryAppWith
-     (pushConfigConcurrentDownloads config)
-     (pullUrlString (pushConfigPullUrl config))
-     (pushConfigMaxBlobsPerRequest config)
-    (runPantryStorage
-        (do count <- allBlobsCount mlastPushedBlobId
-            if count > 0
-              then blobsSink
-                     (pushUrlString (pushConfigPushUrl config))
-                     (allBlobsSource mlastPushedBlobId .|
-                      CL.mapM
-                        (\(blobId, blob) -> do
-                           liftIO
-                             (writeIORef mlastBlobIdRef (Just blobId))
-                           pure blob) .|
-                      stickyProgress count)
-              else pure ()))
+    (pushConfigConcurrentDownloads config)
+    (pullUrlString (pushConfigPullUrl config))
+    (pushConfigMaxBlobsPerRequest config)
+    (do blobs <-
+          runPantryStorage
+            (do count <- allBlobsCount mlastPushedBlobId
+                if count > 0
+                  then blobsSink
+                         (pushUrlString (pushConfigPushUrl config))
+                         (allBlobsSource mlastPushedBlobId .|
+                          CL.mapM
+                            (\(blobId, blob) -> do
+                               liftIO (writeIORef mlastBlobIdRef (Just blobId))
+                               pure blob) .|
+                          stickyProgress count)
+                  else pure ()
+                pure count)
+        when
+          (blobs == 0)
+          (logInfo "There are no new blobs to push since last time."))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
   case mlastBlobId of
     Nothing -> pure ()
@@ -550,7 +576,7 @@ populateFromRawSnapshot concurrentDownloads rawSnapshot = do
   let total = length (rsPackages rawSnapshot)
   pooledForConcurrentlyN_
     concurrentDownloads
-    (zip [0 :: Int ..] (map rspLocation (M.elems (rsPackages rawSnapshot))))
+    (zip [1 :: Int ..] (map rspLocation (M.elems (rsPackages rawSnapshot))))
     (\(i, rawPackageLocationImmutable) -> do
        logSticky
          ("Loading package: " <> display i <> "/" <> display total <> ": " <>
@@ -569,10 +595,32 @@ loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
   loadSnapshot snapshotLocation
 
-runPantryStorage ::
-     (MonadReader PantryApp m, MonadUnliftIO m)
-  => ReaderT SqlBackend (RIO PantryStorage) b
-  -> m b
+--------------------------------------------------------------------------------
+-- Runners
+
+-- | Get the log func used by everything in the app.
+getLogOptions :: MonadIO f => Bool -> f LogOptions
+getLogOptions verbose = fmap setOptions (logOptionsHandle stderr verbose)
+  where
+    setOptions =
+      setLogUseTime verbose .
+      setLogUseColor False .
+      setLogUseLoc False .
+      setLogTerminal False
+
+-- | Our wrapper around Pantry's runPantryAppWith, to use our own
+-- logger.
+runPantryAppWith :: HasLogFunc env => Int -> String -> Int -> RIO PantryApp a -> RIO env a
+runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
+  logFunc <- asks (view logFuncL)
+  Pantry.runPantryAppWith
+    maxConnCount
+    casaPullURL
+    casaMaxPerRequest
+    (local (set logFuncL logFunc) f)
+
+-- | Run database access inside Pantry's database.
+runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO PantryApp a
 runPantryStorage action = do
   pantryApp <- ask
   storage <- fmap (pcStorage . view pantryConfigL) ask
