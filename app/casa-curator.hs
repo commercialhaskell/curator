@@ -146,10 +146,18 @@ data ContinuousConfig =
     , continuousConfigMaxBlobsPerRequest :: Int
     , continuousConfigHackageLimit :: Maybe Int
     , continuousConfigSnapshotsLimit :: Maybe Int
+    , continuousConfigResetPush :: Bool
+    , continuousConfigResetPull :: Bool
     }
 
 verboseParser :: Parser Bool
 verboseParser = flag False True (long "verbose" <> short 'v' <> help "Verbose output")
+
+resetPushParser :: Parser Bool
+resetPushParser = flag False True (long "reset-push" <> help "Reset push cache")
+
+resetPullParser :: Parser Bool
+resetPullParser = flag False True (long "reset-pull" <> help "Reset pull cache")
 
 continuousConfig :: Parser ContinuousConfig
 continuousConfig =
@@ -172,7 +180,8 @@ continuousConfig =
     (option
        auto
        (long "snapshots-limit" <> help "Debug flag to pull n snapshots" <>
-        metavar "INT"))
+        metavar "INT")) <*>
+  resetPushParser <*> resetPullParser
 
 sqliteFileParser :: Parser Text
 sqliteFileParser =
@@ -244,7 +253,19 @@ continuousPopulatePushCommand continuousConfig = do
     (continuousConfigSqliteFile continuousConfig)
     (runMigration migrateAll)
   forever
-    (do pullAndPush
+    (do when
+          (continuousConfigResetPull continuousConfig)
+          (do logInfo "Resetting pull cache..."
+              withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (do deleteWhere ([] :: [Filter LastDownloaded])))
+        when
+          (continuousConfigResetPush continuousConfig)
+          (do logInfo "Resetting push cache..."
+              withContinuousProcessDb
+                (continuousConfigSqliteFile continuousConfig)
+                (do deleteWhere ([] :: [Filter LastPushed])))
+        pullAndPush
         delay)
   where
     delay =
