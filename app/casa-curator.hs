@@ -268,11 +268,16 @@ continuousPopulatePushCommand continuousConfig = do
         pullAndPush
         delay)
   where
-    delay =
+    delay = do
+      logInfo
+        ("Delaying for " <> display (continuousConfigSleepFor continuousConfig) <>
+         " minutes.")
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
+      logInfo "Getting hackage packages ..."
       newHackagePackages <- getNewHackagePackages continuousConfig
+      logInfo "Getting new snapshots ..."
       newNames <- getNewSnapshots continuousConfig
       for_
         (maybe
@@ -285,6 +290,7 @@ continuousPopulatePushCommand continuousConfig = do
            withContinuousProcessDb
              (continuousConfigSqliteFile continuousConfig)
              (insertLoadedSnapshot name))
+      logInfo "Initiating push ..."
       pushCommand
         PushConfig
           { pushConfigConcurrentDownloads =
@@ -295,6 +301,7 @@ continuousPopulatePushCommand continuousConfig = do
               continuousConfigMaxBlobsPerRequest continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           }
+      logInfo "Push done."
 
 getNewSnapshots :: HasLogFunc env => ContinuousConfig -> RIO env (Set Text)
 getNewSnapshots continuousConfig = do
