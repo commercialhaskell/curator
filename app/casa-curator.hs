@@ -252,20 +252,20 @@ continuousPopulatePushCommand continuousConfig = do
   runSqlite
     (continuousConfigSqliteFile continuousConfig)
     (runMigration migrateAll)
+  when
+    (continuousConfigResetPull continuousConfig)
+    (do logInfo "Resetting pull cache..."
+        withContinuousProcessDb
+          (continuousConfigSqliteFile continuousConfig)
+          (do deleteWhere ([] :: [Filter LastDownloaded])))
+  when
+    (continuousConfigResetPush continuousConfig)
+    (do logInfo "Resetting push cache..."
+        withContinuousProcessDb
+          (continuousConfigSqliteFile continuousConfig)
+          (do deleteWhere ([] :: [Filter LastPushed])))
   forever
-    (do when
-          (continuousConfigResetPull continuousConfig)
-          (do logInfo "Resetting pull cache..."
-              withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (do deleteWhere ([] :: [Filter LastDownloaded])))
-        when
-          (continuousConfigResetPush continuousConfig)
-          (do logInfo "Resetting push cache..."
-              withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (do deleteWhere ([] :: [Filter LastPushed])))
-        pullAndPush
+    (do pullAndPush
         delay)
   where
     delay = do
