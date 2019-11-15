@@ -265,7 +265,11 @@ continuousPopulatePushCommand continuousConfig = do
           (continuousConfigSqliteFile continuousConfig)
           (do deleteWhere ([] :: [Filter LastPushed])))
   forever
-    (do pullAndPush
+    (do async <- async pullAndPush
+        result <- waitCatch async
+        case result of
+          Left err -> logError (fromString (show err))
+          Right () -> pure ()
         delay)
   where
     delay = do
