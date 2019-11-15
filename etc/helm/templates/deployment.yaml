@@ -28,7 +28,7 @@ spec:
             name: sqlite-volume
           command: ["casa-curator"]
           workingDir: /app
-          args: ["-v","continuous-populate-push","--reset-push","--sleep-for",{{ .Values.sleepFor | quote }},"--sqlite-file",{{ .Values.sqliteFile | quote }},"--download-concurrency",{{ .Values.downloadConcurrency | quote }},"--push-url",{{ $pushUrl | quote }},"--pull-url",{{ $pullUrl | quote }}]
+          args: ["-v","continuous-populate-push","--reset-push","--reset-pull","--sleep-for",{{ .Values.sleepFor | quote }},"--sqlite-file",{{ .Values.sqliteFile | quote }},"--download-concurrency",{{ .Values.downloadConcurrency | quote }},"--push-url",{{ $pushUrl | quote }},"--pull-url",{{ $pullUrl | quote }}]
           resources:
 {{ toYaml .Values.curatorResources.resources | indent 12 }}
     {{- with .Values.nodeSelector }}
