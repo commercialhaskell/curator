@@ -252,27 +252,36 @@ continuousPopulatePushCommand continuousConfig = do
   runSqlite
     (continuousConfigSqliteFile continuousConfig)
     (runMigration migrateAll)
+  when
+    (continuousConfigResetPull continuousConfig)
+    (do logInfo "Resetting pull cache..."
+        withContinuousProcessDb
+          (continuousConfigSqliteFile continuousConfig)
+          (do deleteWhere ([] :: [Filter LastDownloaded])))
+  when
+    (continuousConfigResetPush continuousConfig)
+    (do logInfo "Resetting push cache..."
+        withContinuousProcessDb
+          (continuousConfigSqliteFile continuousConfig)
+          (do deleteWhere ([] :: [Filter LastPushed])))
   forever
-    (do when
-          (continuousConfigResetPull continuousConfig)
-          (do logInfo "Resetting pull cache..."
-              withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (do deleteWhere ([] :: [Filter LastDownloaded])))
-        when
-          (continuousConfigResetPush continuousConfig)
-          (do logInfo "Resetting push cache..."
-              withContinuousProcessDb
-                (continuousConfigSqliteFile continuousConfig)
-                (do deleteWhere ([] :: [Filter LastPushed])))
-        pullAndPush
+    (do async <- async pullAndPush
+        result <- waitCatch async
+        case result of
+          Left err -> logError (fromString (show err))
+          Right () -> pure ()
         delay)
   where
-    delay =
+    delay = do
+      logInfo
+        ("Delaying for " <> display (continuousConfigSleepFor continuousConfig) <>
+         " minutes.")
       threadDelay
         (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
     pullAndPush = do
+      logInfo "Getting hackage packages ..."
       newHackagePackages <- getNewHackagePackages continuousConfig
+      logInfo "Getting new snapshots ..."
       newNames <- getNewSnapshots continuousConfig
       for_
         (maybe
@@ -285,6 +294,7 @@ continuousPopulatePushCommand continuousConfig = do
            withContinuousProcessDb
              (continuousConfigSqliteFile continuousConfig)
              (insertLoadedSnapshot name))
+      logInfo "Initiating push ..."
       pushCommand
         PushConfig
           { pushConfigConcurrentDownloads =
@@ -295,6 +305,7 @@ continuousPopulatePushCommand continuousConfig = do
               continuousConfigMaxBlobsPerRequest continuousConfig
           , configSqliteFile = continuousConfigSqliteFile continuousConfig
           }
+      logInfo "Push done."
 
 getNewSnapshots :: HasLogFunc env => ContinuousConfig -> RIO env (Set Text)
 getNewSnapshots continuousConfig = do
@@ -464,6 +475,8 @@ pushCommand config = do
       (fmap (lastPushedBlobId . entityVal))
       (liftIO
          (withContinuousProcessDb (configSqliteFile config) (selectFirst [] [])))
+  logInfo
+    ("Pushing to " <> fromString (pushUrlString (pushConfigPushUrl config)))
   runPantryAppWith
     (pushConfigConcurrentDownloads config)
     (pullUrlString (pushConfigPullUrl config))
@@ -472,20 +485,28 @@ pushCommand config = do
           runPantryStorage
             (do count <- allBlobsCount mlastPushedBlobId
                 if count > 0
-                  then blobsSink
-                         (pushUrlString (pushConfigPushUrl config))
-                         (allBlobsSource mlastPushedBlobId .|
-                          CL.mapM
-                            (\(blobId, blob) -> do
-                               liftIO (writeIORef mlastBlobIdRef (Just blobId))
-                               pure blob) .|
-                          stickyProgress count)
+                  then do
+                    blobsSink
+                      (pushUrlString (pushConfigPushUrl config))
+                      (allBlobsSource mlastPushedBlobId .|
+                       CL.mapM
+                         (\(blobId, blob) -> do
+                            liftIO (writeIORef mlastBlobIdRef (Just blobId))
+                            pure blob) .|
+                       stickyProgress count)
                   else pure ()
                 pure count)
         when
           (blobs == 0)
           (logInfo "There are no new blobs to push since last time."))
   mlastBlobId <- liftIO (readIORef mlastBlobIdRef)
+  logInfo
+    ("Pushed to " <> fromString (pushUrlString (pushConfigPushUrl config)))
+  logInfo
+    ("Last blob pushed: " <>
+     case mlastBlobId of
+       Nothing -> "None recorded!"
+       Just lastBlobId -> fromString (show lastBlobId))
   case mlastBlobId of
     Nothing -> pure ()
     Just lastBlobId ->
@@ -507,10 +528,12 @@ stickyProgress total = go (0 :: Int)
           lift (lift (logStickyDone ("Pushed " <> display total <> " blobs.")))
         Just v -> do
           let i' = i + 1
-          lift
+          when
+            False
             (lift
-               (logSticky
-                  ("Pushing blobs: " <> display i' <> "/" <> display total)))
+               (lift
+                  (logSticky
+                     ("Pushing blobs: " <> display i' <> "/" <> display total))))
           yield v
           go i'
 
@@ -573,6 +596,7 @@ populateFromRawSnapshot ::
   -> RawSnapshot
   -> RIO env ()
 populateFromRawSnapshot concurrentDownloads rawSnapshot = do
+  logInfo "Populating from snapshot..."
   let total = length (rsPackages rawSnapshot)
   pooledForConcurrentlyN_
     concurrentDownloads
