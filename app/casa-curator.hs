@@ -585,6 +585,7 @@ populateFromRawSnapshot ::
   -> RawSnapshot
   -> RIO env ()
 populateFromRawSnapshot concurrentDownloads rawSnapshot = do
+  logInfo "Populating from snapshot..."
   let total = length (rsPackages rawSnapshot)
   pooledForConcurrentlyN_
     concurrentDownloads
