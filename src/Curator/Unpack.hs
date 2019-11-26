@@ -7,6 +7,7 @@ module Curator.Unpack
 
 import RIO
 import RIO.Process (HasProcessContext)
+import Conduit
 import Pantry
 import Curator.Types
 import Path
@@ -82,9 +83,10 @@ unpackSnapshot cons snap root = do
           )
   stackYaml <- parseRelFile "stack.yaml"
   let stackYamlFP = toFilePath $ root </> stackYaml
+      packages = Set.map (\suffix -> toFilePath (unpacked </> suffix)) suffixes
   liftIO $ encodeFile stackYamlFP $ object
     [ "resolver" .= ("ghc-" ++ versionString (consGhcVersion cons))
-    , "packages" .= Set.map (\suffix -> toFilePath (unpacked </> suffix)) suffixes
+    , "packages" .= packages
     , "flags" .= fmap toCabalStringMap (toCabalStringMap flags)
     , "curator" .= object
         [ "skip-test" .= Set.map CabalString skipTest
@@ -96,3 +98,13 @@ unpackSnapshot cons snap root = do
         ]
     , "system-ghc" .= True
     ]
+
+  -- Remove the out-of-date unpacked dirs
+  let packagesSub = Set.map (\suffix -> root </> unpacked </> suffix) suffixes
+  runConduitRes $
+    sourceDirectory (toFilePath (root </> unpacked)) .|
+    mapMC parseAbsDir .|
+    mapM_C (\dir -> unless (dir `Set.member` packagesSub) $ do
+      logInfo $ "Deleting out-of-date directory " <> fromString (toFilePath dir)
+      removeDirRecur dir
+      )
