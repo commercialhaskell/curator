@@ -109,6 +109,15 @@ toLoc name pc =
               Nothing -> error $ "Impossible! No revisions found for " ++ show (name, version)
               Just (BlobKey sha size, _) -> pure $ CFIHash sha $ Just size
           pure $ Just $ RPLIHackage (PackageIdentifierRevision name version cfi) Nothing
+    PSUrl url ->
+      pure $ Just $ RPLIArchive
+        RawArchive
+          { raLocation = ALUrl url
+          , raHash = Nothing
+          , raSize = Nothing
+          , raSubdir = ""
+          }
+        (RawPackageMetadata Nothing Nothing Nothing Nothing)
 
 traverseValidate
   :: (MonadUnliftIO m, Traversable t)

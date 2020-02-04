@@ -541,7 +541,7 @@ stickyProgress total = go (0 :: Int)
 -- paginated. We want everything, so we just keep increasing the page
 -- index until we get a null result.
 downloadAllSnapshotTextNames :: (HasLogFunc env) => RIO env (Set Text)
-downloadAllSnapshotTextNames = go 1 mempty
+downloadAllSnapshotTextNames = go (1 :: Int) mempty
   where
     go page acc = do
       request <-
@@ -645,7 +645,7 @@ runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
 
 -- | Run database access inside Pantry's database.
 runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO PantryApp a
-runPantryStorage action = do
+runPantryStorage action' = do
   pantryApp <- ask
   storage <- fmap (pcStorage . view pantryConfigL) ask
   withResourceMap
@@ -655,4 +655,4 @@ runPantryStorage action = do
             {_pantryStorageResourceMap = resourceMap, _pantryStoragePantry = pantryApp})
          (withStorage_
             storage
-            action))
+            action'))

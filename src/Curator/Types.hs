@@ -95,14 +95,20 @@ instance FromJSON PackageConstraints where
 
 data PackageSource
   = PSHackage !HackageSource
+  | PSUrl !Text
   deriving Show
 instance ToJSON PackageSource where
   toJSON (PSHackage hs) = object $ ("type" .= ("hackage" :: Text)) : hsToPairs hs
+  toJSON (PSUrl url) = object
+    [ "type" .= ("url" :: Text)
+    , "url" .= url
+    ]
 instance FromJSON PackageSource where
   parseJSON = withObject "PackageSource" $ \o -> do
     typ <- o .: "type"
     case typ :: Text of
       "hackage" -> PSHackage <$> hackage o
+      "url" -> PSUrl <$> o .: "url"
       _ -> fail $ "Invalid type: " ++ show typ
     where
       hackage o = HackageSource
