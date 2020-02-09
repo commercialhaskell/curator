@@ -28,6 +28,7 @@ applyPvpRules constraints0 major minor = do
                 (Nothing, Just y) -> Just y
                 (Just x, Just y) -> Just $ intersectVersionRanges x y
          in PSHackage hs { hsRange = range }
+      goSource _name (PSUrl url) = PSUrl url
   let goPC name pc = pc { pcSource = goSource name $ pcSource pc }
   let packages = Map.mapWithKey goPC $ consPackages constraints0
   pure constraints0 { consPackages = packages }

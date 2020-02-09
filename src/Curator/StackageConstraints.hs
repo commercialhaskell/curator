@@ -65,6 +65,8 @@ data SC = SC
   , scNoRevisions :: !(Set PackageName)
 
   , scNonParallelBuilds :: !(Set PackageName)
+
+  , scTarballUrls :: !(Map PackageName Text)
   }
   deriving Show
 
@@ -93,6 +95,8 @@ instance FromJSON SC where
         . map (\(CabalString (PackageIdentifier name version)) -> Map.singleton name version)
       <$> o .: "tell-me-when-its-released"
     scNonParallelBuilds <- Set.map unCabalString <$> o .: "non-parallel-builds"
+
+    scTarballUrls <- Map.mapKeys unCabalString <$> (o .:? "tarball-urls" .!= Map.empty)
 
     pure SC {..}
 
@@ -194,17 +198,20 @@ convert sc0 = do
 
           Right PackageConstraints
             { pcMaintainers = maintainers
-            , pcSource = PSHackage $ HackageSource
-                { hsRange =
-                    case ranges of
-                      [] -> Nothing
-                      r:rs -> Just $ foldl' intersectVersionRanges r rs
-                , hsRequiredLatest = Map.lookup name (scTellMeWhenItsReleased sc1)
-                , hsRevisions =
-                    if Set.member name (scNoRevisions sc1)
-                      then NoRevisions
-                      else UseRevisions
-                }
+            , pcSource =
+                case Map.lookup name $ scTarballUrls sc1 of
+                  Nothing -> PSHackage $ HackageSource
+                    { hsRange =
+                        case ranges of
+                          [] -> Nothing
+                          r:rs -> Just $ foldl' intersectVersionRanges r rs
+                    , hsRequiredLatest = Map.lookup name (scTellMeWhenItsReleased sc1)
+                    , hsRevisions =
+                        if Set.member name (scNoRevisions sc1)
+                          then NoRevisions
+                          else UseRevisions
+                    }
+                  Just url -> PSUrl url
             , pcFlags = fromMaybe mempty $ Map.lookup name $ scFlags sc1
             , pcSkipBuild = Set.member name $ scSkippedBuilds sc1
             , pcNonParallelBuild = Set.member name $ scNonParallelBuilds sc1
