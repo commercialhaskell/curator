@@ -162,10 +162,10 @@ checkDependencyGraph constraints snapshot = do
         cabalName = "Cabal"
         cabalError err = pure . Map.singleton cabalName $ [OtherError err]
     pkgErrors <- case Map.lookup cabalName declared of
-      Nothing ->
-        cabalError "Cabal not found in snapshot"
-      Just Nothing ->
-        cabalError "Cabal version in snapshot is not defined"
+      Nothing -> pure Map.empty
+        -- cabalError "Cabal not found in snapshot"
+      Just Nothing -> pure Map.empty
+        -- cabalError "Cabal version in snapshot is not defined"
       Just (Just cabalVersion) -> do
         let isWiredIn pn _ = pn `Set.member` wiredInGhcPackages
             (wiredIn, packages) =
