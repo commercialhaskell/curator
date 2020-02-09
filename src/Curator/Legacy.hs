@@ -117,11 +117,17 @@ data Convert = Convert
 legacyBulk :: LegacyBulkArgs -> RIO PantryApp ()
 legacyBulk LegacyBulkArgs {..} = do
   logInfo "Bulk converting Pantry-based snapshots to legacy snapshots"
-  let toDest (TargetLts major minor) = lbaLts </> concat ["lts-", show major, ".", show minor, ".yaml"]
-      toDest (TargetNightly day) = lbaNightly </> concat ["nightly-", show day, ".yaml"]
+  let toDest (TargetLts major minor)
+        -- stop converting from LTS 15 and on
+        | major >= 15 = Nothing
+        | otherwise = Just $ lbaLts </> concat ["lts-", show major, ".", show minor, ".yaml"]
+      toDest (TargetNightly day)
+        -- and nightly from 2020-02-09
+        | day >= fromGregorian 2020 2 9 = Nothing
+        | otherwise = Just $ lbaNightly </> concat ["nightly-", show day, ".yaml"]
   runConduitRes $
     sourceDirectoryDeep True lbaSnapshots .|
-    concatMapC (\fp -> Convert fp <$> (toDest <$> (stripDirPrefix lbaSnapshots fp >>= parseTarget))) .|
+    concatMapC (\fp -> Convert fp <$> (stripDirPrefix lbaSnapshots fp >>= parseTarget >>= toDest)) .|
     filterMC (fmap not . doesFileExist . convertTo) .|
     mapM_C (lift . convert)
 
