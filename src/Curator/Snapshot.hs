@@ -211,6 +211,7 @@ pkgBoundsError dep maintainers mdepVer isBoot users =
   where
     showDepVer | Just version <- mdepVer =
                    T.concat [ display dep , "-" , display version
+                            , displayChangelog dep version
                             , displayMaintainers maintainers
                             , " is out of bounds for:"
                             ]
@@ -220,6 +221,12 @@ pkgBoundsError dep maintainers mdepVer isBoot users =
                             , if isBoot then ", GHC boot library" else ""
                             , ") depended on by:"
                             ]
+
+    displayChangelog pkgName version = T.concat
+            [ " ([changelog](http://hackage.haskell.org/package/"
+            , display dep, "-", display version
+            , "/changelog))"
+            ]
 
     displayMaintainers ms | Set.null ms = ""
                           | otherwise = T.concat [" (", T.intercalate ", " (Set.toList ms), ")"]
