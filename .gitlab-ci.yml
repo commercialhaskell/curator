@@ -34,14 +34,14 @@ build:
     - CI_BUILD_TOKEN="" KUBE_TOKEN="" PROD_KUBE_TOKEN="" PROD_DOCKER_PASSWORD="" etc/scripts/stage_docker.sh --install-ghc --test
     - |
       if [[ "$CI_BUILD_REF_NAME" == "master" ]]; then
-        aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-latest-linux-amd64
-        aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-latest-linux-amd64
-        aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-${CI_BUILD_TAG}-linux-amd64
-        aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-${CI_BUILD_TAG}-linux-amd64
+        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-latest-linux-amd64
+        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-latest-linux-amd64
+        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-${CI_BUILD_TAG}-linux-amd64
+        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-${CI_BUILD_TAG}-linux-amd64
       fi
       if [[ "$CI_BUILD_REF_NAME" == "ci" ]]; then
-      aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-ci-latest-linux-amd64
-      aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-ci-latest-linux-amd64
+      aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-ci-latest-linux-amd64
+      aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-ci-latest-linux-amd64
       fi
     - docker build -t "${DEPLOYMENT_IMAGE}" etc/docker
     - docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}"
