@@ -29,11 +29,16 @@ build:
     paths:
       - .stack-work/
       - .stack-root/
+      - stack-work.tar
+      - stack-root.tar
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
     - etc/scripts/stage_docker.sh --install-ghc --test
+    - tar cf stack-work.tar .stack-work
+    - tar cf stack-root.tar .stack-root
+    - rm -r .stack-work .stack-root
   artifacts:
     name: "${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
     paths:
