@@ -1,11 +1,5 @@
 image: registry.gitlab.fpcomplete.com/fpco/default-build-image:7293
 
-cache:
-  key: "$CI_BUILD_NAME"
-  paths:
-    - .stack-work/
-    - .stack-root/
-
 stages:
   - build
   - deploy
@@ -17,8 +11,8 @@ variables:
 
 # This creates anchors for bits of script that are reused between builds
 .anchors:
-  - &IMAGEUPGRADE docker build -t "${DEPLOYMENT_IMAGE}" etc/docker
-    docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}"
+  - &IMAGEUPGRADE docker build -t "${DEPLOYMENT_IMAGE}" etc/docker &&
+    docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}" &&
     docker push "${DEPLOYMENT_IMAGE}"
   # The KUBE_* variables are set by Gitlab's Kubernetes deployment service
   - &KUBELOGIN echo "$KUBE_CA_PEM" >"$HOME/ca.pem" &&
@@ -30,11 +24,16 @@ variables:
     helm --tiller-namespace ${KUBE_NAMESPACE} status "${DEPLOYMENT_NAME}"
 
 build:
+  cache:
+    key: "$CI_BUILD_NAME"
+    paths:
+      - .stack-work/
+      - .stack-root/
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
-    - CI_BUILD_TOKEN="" KUBE_TOKEN="" PROD_KUBE_TOKEN="" PROD_DOCKER_PASSWORD="" etc/scripts/stage_docker.sh --install-ghc --test
+    - etc/scripts/stage_docker.sh --install-ghc --test
   artifacts:
     name: "${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
     paths:
