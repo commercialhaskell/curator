@@ -17,6 +17,9 @@ variables:
 
 # This creates anchors for bits of script that are reused between builds
 .anchors:
+  - &IMAGEUPGRADE docker build -t "${DEPLOYMENT_IMAGE}" etc/docker
+  - docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}"
+  - docker push "${DEPLOYMENT_IMAGE}"
   # The KUBE_* variables are set by Gitlab's Kubernetes deployment service
   - &KUBELOGIN echo "$KUBE_CA_PEM" >"$HOME/ca.pem" &&
     kubectl config set-cluster cluster --server="$KUBE_URL" --certificate-authority="$HOME/ca.pem" &&
@@ -32,29 +35,32 @@ build:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
     - CI_BUILD_TOKEN="" KUBE_TOKEN="" PROD_KUBE_TOKEN="" PROD_DOCKER_PASSWORD="" etc/scripts/stage_docker.sh --install-ghc --test
-    - |
-      if [[ "$CI_BUILD_REF_NAME" == "master" ]]; then
-        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-latest-linux-amd64
-        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-latest-linux-amd64
-        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-${CI_BUILD_TAG}-linux-amd64
-        aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-${CI_BUILD_TAG}-linux-amd64
-      fi
-      if [[ "$CI_BUILD_REF_NAME" == "ci" ]]; then
-      aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-ci-latest-linux-amd64
-      aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/casa-curator-ci-latest-linux-amd64
-      fi
-    - docker build -t "${DEPLOYMENT_IMAGE}" etc/docker
-    - docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}"
-    - docker push "${DEPLOYMENT_IMAGE}"
-    - |
-      if [[ "$CI_BUILD_REF_NAME" == "master" ]]; then
-        docker tag "${DEPLOYMENT_IMAGE}" "${CI_REGISTRY_IMAGE}:latest"
-        docker push "${CI_REGISTRY_IMAGE}:latest"
-      fi
-      if [[ "$CI_BUILD_REF_NAME" == "ci-cron" ]]; then
-        docker tag "${DEPLOYMENT_IMAGE}" "${CI_REGISTRY_IMAGE}:ci-cron"
-        docker push "${CI_REGISTRY_IMAGE}:ci-cron"
-      fi
+  artifacts:
+    name: "${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
+    paths:
+      - etc/docker/_artifacts/
+
+deploy_prod_s3:
+  stage: deploy
+  only:
+    - master
+  environment:
+    name: production
+  script:
+    - aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-latest-linux-amd64
+    - aws s3 cp etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-latest-linux-amd64
+    - aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-${CI_BUILD_TAG}-linux-amd64
+    - aws s3 cp etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-${CI_BUILD_TAG}-linux-amd64
+
+deploy_ci_s3:
+  stage: deploy
+  only:
+    - ci
+  environment:
+    name: staging
+  script:
+    - aws s3 cp etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-ci-latest-linux-amd64
+    - aws s3 cp etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-ci-latest-linux-amd64
 
 deploy_prod:
   stage: deploy
@@ -66,6 +72,10 @@ deploy_prod:
     KUBE_NAMESPACE: "fpco-public"
     DEPLOYMENT_NAME: "casa-curator-prod"
     CASA_SERVICE: "CASA_SERVER_PROD_SERVICE_"
+  before_script:
+    - *IMAGEUPGRADE
+    - docker tag "${DEPLOYMENT_IMAGE}" "${CI_REGISTRY_IMAGE}:latest"
+    - docker push "${CI_REGISTRY_IMAGE}:latest"
   script:
     - export
       KUBE_CA_PEM="$PROD_V2_KUBE_CA_PEM"
@@ -86,6 +96,10 @@ deploy_ci:
     KUBE_NAMESPACE: "fpco-public"
     DEPLOYMENT_NAME: "casa-curator-ci"
     CASA_SERVICE: "CASA_SERVER_CI_SERVICE_"
+  before_script:
+    - *IMAGEUPGRADE
+    - docker tag "${DEPLOYMENT_IMAGE}" "${CI_REGISTRY_IMAGE}:ci-cron"
+    - docker push "${CI_REGISTRY_IMAGE}:ci-cron"
   script:
     - *HELMUPGRADE
     - *HELMCHECK
