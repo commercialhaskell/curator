@@ -46,10 +46,10 @@ deploy_prod_s3:
   environment:
     name: production
   script:
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-latest-linux-amd64
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-latest-linux-amd64
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-${CI_BUILD_TAG}-linux-amd64
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-${CI_BUILD_TAG}-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/curator-latest-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/casa-curator-latest-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/curator-${CI_BUILD_TAG}-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/casa-curator-${CI_BUILD_TAG}-linux-amd64
 
 deploy_ci_s3:
   stage: deploy
@@ -58,8 +58,8 @@ deploy_ci_s3:
   environment:
     name: staging
   script:
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/curator/curator-ci-latest-linux-amd64
-    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/curator/casa-curator-ci-latest-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/curator-ci-latest-linux-amd64
+    - aws s3 cp --acl=public-read etc/docker/_artifacts/casa-curator s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/casa-curator-ci-latest-linux-amd64
 
 deploy_prod:
   stage: deploy
