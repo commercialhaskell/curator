@@ -8,6 +8,11 @@ variables:
   STACK_ROOT: "${CI_PROJECT_DIR}/.stack-root"
   DEPLOYMENT_IMAGE: "${CI_REGISTRY_IMAGE}:${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
   DEPLOYMENT_NAME: "casa-curator-prod"
+  CACHE_S3_PREFIX: "curator-gitlab-ci-cache"
+  S3_BUCKET: "download.fpcomplete.com"
+  STACK_ROOT: "${CI_PROJECT_DIR}/.stack-root"
+  STACK_WORK: "${CI_PROJECT_DIR}/.stack-work"
+  GIT_BRANCH: ${CI_PROJECT_DIR}
 
 # This creates anchors for bits of script that are reused between builds
 .anchors:
