@@ -11,6 +11,7 @@ variables:
   CACHE_S3_PREFIX: "curator-gitlab-ci-cache"
   S3_BUCKET: "download.fpcomplete.com"
   GIT_BRANCH: ${CI_PROJECT_DIR}
+  BASE_BRANCH: ci
 
 # This creates anchors for bits of script that are reused between builds
 .anchors:
@@ -27,15 +28,17 @@ variables:
     helm --tiller-namespace ${KUBE_NAMESPACE} status "${DEPLOYMENT_NAME}"
 
 build:
-  cache:
-    key: "$CI_BUILD_NAME"
-    paths:
-      - .stack-work/
-      - .stack-root/
+  # cache:
+  #   key: "$CI_BUILD_NAME"
+  #   paths:
+  #     - .stack-work/
+  #     - .stack-root/
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
+    - cache-s3 restore stack
+    - cache-s3 restore stack work
     - etc/scripts/stage_docker.sh --install-ghc --test
     - cache-s3 save stack
     - cache-s3 save stack work
