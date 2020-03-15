@@ -36,7 +36,6 @@ build:
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
-    - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
     - cache-s3 restore stack
     - cache-s3 restore stack work
     - etc/scripts/stage_docker.sh --install-ghc --test
