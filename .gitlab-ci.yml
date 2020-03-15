@@ -37,6 +37,8 @@ build:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
     - etc/scripts/stage_docker.sh --install-ghc --test
+    - cache-s3 save stack
+    - cache-s3 save stack work
   artifacts:
     name: "${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
     paths:
