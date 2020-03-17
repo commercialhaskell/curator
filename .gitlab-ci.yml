@@ -26,13 +26,11 @@ variables:
   - &HELMUPGRADE helm --tiller-namespace ${KUBE_NAMESPACE} upgrade --install --force "${DEPLOYMENT_NAME}" etc/helm --set hostEnvVar="${CASA_SERVICE}HOST" --set authEnvVar="${CASA_SERVICE}PORT_AUTHORIZED_PORT" --set portEnvVar="${CASA_SERVICE}PORT_PORT" --set name="${DEPLOYMENT_NAME}" --set app="${DEPLOYMENT_APP}" --set image.image="${DEPLOYMENT_IMAGE}" --values etc/helm/values/$CI_ENVIRONMENT_NAME.yaml --namespace ${KUBE_NAMESPACE}
   - &HELMCHECK helm --tiller-namespace ${KUBE_NAMESPACE} ls &&
     helm --tiller-namespace ${KUBE_NAMESPACE} status "${DEPLOYMENT_NAME}"
+  - &ZIPFILES bzip2 -zk etc/docker/_artifacts/* &&
+    mkdir -p etc/docker/_artifacts/bz2 &&
+    mv etc/docker/_artifacts/*.bz2 etc/docker/_artifacts/bz2
 
 build:
-  # cache:
-  #   key: "$CI_BUILD_NAME"
-  #   paths:
-  #     - .stack-work/
-  #     - .stack-root/
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
@@ -44,7 +42,7 @@ build:
   artifacts:
     name: "${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
     paths:
-      - etc/docker/_artifacts/bz2/
+      - etc/docker/_artifacts/
 
 deploy_prod_s3:
   stage: deploy
@@ -52,6 +50,8 @@ deploy_prod_s3:
     - master
   environment:
     name: production
+  before_script:
+    - *ZIPFILES
   script:
     - aws s3 cp --acl=public-read etc/docker/_artifacts/bz2/curator.bz2 s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/curator-latest-linux-amd64.bz2
     - aws s3 cp --acl=public-read etc/docker/_artifacts/bz2/casa-curator.bz2 s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/casa-curator-latest-linux-amd64.bz2
@@ -64,6 +64,8 @@ deploy_ci_s3:
     - ci
   environment:
     name: staging
+  before_script:
+    - *ZIPFILES
   script:
     - aws s3 cp --acl=public-read etc/docker/_artifacts/bz2/curator.bz2 s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/curator-ci-latest-linux-amd64.bz2
     - aws s3 cp --acl=public-read etc/docker/_artifacts/bz2/casa-curator.bz2 s3://${CI_S3_BUCKET}/${CI_S3_DIRECTORY}/casa-curator-ci-latest-linux-amd64.bz2
