@@ -14,13 +14,14 @@ variables:
   STACK_ROOT: "${CI_PROJECT_DIR}/.stack-root"
   DEPLOYMENT_IMAGE: "${CI_REGISTRY_IMAGE}:${CI_BUILD_REF_SLUG}_${CI_PIPELINE_ID}"
   DEPLOYMENT_NAME: "casa-curator-prod"
+  KUBECONFIG: /etc/deploy/kubeconfig.yaml
 
 build:
   stage: build
   script:
     # Clear *_TOKEN variables during code build so that compile-time code can't access them
     - apt-get update && apt-get install -y --no-install-recommends libpq-dev git rsync
-    - CI_BUILD_TOKEN="" KUBE_TOKEN="" PROD_KUBE_TOKEN="" PROD_DOCKER_PASSWORD="" etc/scripts/stage_docker.sh --install-ghc --test
+    - CI_BUILD_TOKEN="" KUBECONFIG_YAML="" KUBE_TOKEN="" PROD_KUBE_TOKEN="" PROD_DOCKER_PASSWORD="" etc/scripts/stage_docker.sh --install-ghc --test
     - docker build -t "${DEPLOYMENT_IMAGE}" etc/docker
     - docker login -u gitlab-ci-token -p "${CI_BUILD_TOKEN}" "${CI_REGISTRY}"
     - docker push "${DEPLOYMENT_IMAGE}"
@@ -44,14 +45,7 @@ deploy_prod:
     DEPLOYMENT_NAME: "casa-curator-prod"
     CASA_SERVICE: "CASA_SERVER_PROD_SERVICE_"
   script:
-    - export
-      KUBE_CA_PEM="$PROD_V2_KUBE_CA_PEM"
-      KUBE_URL="$PROD_V2_KUBE_URL"
-      KUBE_TOKEN="$PROD_V2_KUBE_TOKEN"
-
-    - echo "$KUBE_CA_PEM" >"$HOME/ca.pem" &&
-      kubectl config set-cluster cluster --server="$KUBE_URL" --certificate-authority="$HOME/ca.pem" &&
-      kubectl config set-credentials cluster --token="$KUBE_TOKEN" && kubectl config set-context cluster --cluster=cluster --user=cluster &&
-      kubectl config use-context cluster
+    - echo "${KUBECONFIG_YAML}" > /etc/deploy/kubeconfig.enc
+    - base64 -d </etc/deploy/kubeconfig.enc > ${KUBECONFIG}
     - kubectl set image "deployment/casa-curator-prod" casa-curator="$DEPLOYMENT_IMAGE"
     - kubectl rollout status "deployment/casa-curator-prod"
