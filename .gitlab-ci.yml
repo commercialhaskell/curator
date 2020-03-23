@@ -45,6 +45,7 @@ deploy_prod:
     DEPLOYMENT_NAME: "casa-curator-prod"
     CASA_SERVICE: "CASA_SERVER_PROD_SERVICE_"
   script:
+    - mkdir -p /etc/deploy
     - echo "${KUBECONFIG_YAML}" > /etc/deploy/kubeconfig.enc
     - base64 -d </etc/deploy/kubeconfig.enc > ${KUBECONFIG}
     - kubectl set image "deployment/casa-curator-prod" casa-curator="$DEPLOYMENT_IMAGE"
