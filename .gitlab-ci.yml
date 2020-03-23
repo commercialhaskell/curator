@@ -41,7 +41,6 @@ deploy_prod:
   environment:
     name: production
   variables:
-    KUBE_NAMESPACE: "fpco-public"
     DEPLOYMENT_NAME: "casa-curator-prod"
     CASA_SERVICE: "CASA_SERVER_PROD_SERVICE_"
   script:
@@ -49,11 +48,10 @@ deploy_prod:
       KUBE_CA_PEM="$PROD_V2_KUBE_CA_PEM"
       KUBE_URL="$PROD_V2_KUBE_URL"
       KUBE_TOKEN="$PROD_V2_KUBE_TOKEN"
-      KUBE_NAMESPACE="$PROD_V2_KUBE_NAMESPACE"
 
     - echo "$KUBE_CA_PEM" >"$HOME/ca.pem" &&
       kubectl config set-cluster cluster --server="$KUBE_URL" --certificate-authority="$HOME/ca.pem" &&
-      kubectl config set-credentials cluster --token="$KUBE_TOKEN" && kubectl config set-context cluster --cluster=cluster --user=cluster --namespace="$KUBE_NAMESPACE" &&
+      kubectl config set-credentials cluster --token="$KUBE_TOKEN" && kubectl config set-context cluster --cluster=cluster --user=cluster &&
       kubectl config use-context cluster
     - kubectl set image "deployment/casa-curator-prod" casa-curator="$DEPLOYMENT_IMAGE"
     - kubectl rollout status "deployment/casa-curator-prod"
