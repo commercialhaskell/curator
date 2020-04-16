@@ -1,6 +1,4 @@
-resolver: lts-13.28
-packages:
-- .
+resolver: lts-15.7
 
 # For local dev
 # - ../pantry
@@ -8,20 +6,15 @@ packages:
 # - ../casa/casa-types
 
 extra-deps:
-- http-download-0.1.0.0
-- rio-prettyprint-0.1.0.0
-- ansi-terminal-0.9.1
-- rio-0.1.10.0
-
-- github: commercialhaskell/pantry
-  commit: 8ebe03d044f740bf9b975ee7c59d44e45d8a92f2
-  # size: 94708
-  # sha256: ad9df7d1d7e35c4957248c37131b2db7cd8fced35a6b97acd92bdbb1cc4d6f90
+- hackage-security-0.6.0.1@sha256:72ab0fedd55ab1c06b5a08140b5e6ec2568f62165c662ce06ff895ee8a1f1f17,11987
+- hpack-0.33.0@sha256:ca82f630abe0fba199aa05dcc9942ee8bf137e1425049a7a9ac8458c82d9dcc9,4406
+- lukko-0.1.1.2@sha256:c9d3fa30fb6ab2ba16e037586ca79be6e57ec5f00381b6ee5f293400dbdf5515,4485
 
 - github: fpco/casa
-  commit: a0cd05c1a9ce33acbb1bdfb9324370f884916e88
-  # sha256: 812e05de8f9abdbd1101fc94895dcfd5c35962c4d67a43cc20cbc06eb59ea1f0
-  # size: 9508
+  commit: fc0ed26858bfc4f2966ed2dfb2871bae9266dda6
   subdirs:
      - casa-client
      - casa-types
+
+- github: commercialhaskell/pantry
+  commit: e7ced95455dbd713eb6f70cf651d92d309eca554

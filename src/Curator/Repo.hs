@@ -104,14 +104,14 @@ checkoutRepo target dirName repoUrl = do
             year' <- parseRelDir (show year)
             month' <- parseRelDir (show month)
             day' <- parseRelFile (show day)
-            fname <- day' <.> "yaml"
+            fname <- addExtension ".yaml" day'
             pure ( $(mkRelDir "nightly") </> year' </> month' </> fname
                  , "nightly-" <> show d
                  )
         TargetLts x y -> do
             major <- parseRelDir (show x)
             minor <- parseRelFile (show y)
-            fname <- minor <.> "yaml"
+            fname <- addExtension ".yaml" minor
             pure ( $(mkRelDir "lts") </> major </> fname
                  , "lts-" <> show x <> "-" <> show y
                  )

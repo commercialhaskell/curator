@@ -6,7 +6,6 @@ module Curator.UploadDocs
     ) where
 
 import Conduit
-import Distribution.Package (PackageIdentifier(..))
 import Pantry hiding (SHA256)
 import RIO
 import qualified RIO.Directory as D

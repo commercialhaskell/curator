@@ -17,6 +17,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Simple tool to push all blobs from the Pantry database to Casa.
 
@@ -333,7 +336,7 @@ getNewHackagePackages continuousConfig = do
             (selectFirst [] [])))
   runPantryAppWith
     (continuousConfigConcurrentDownloads continuousConfig)
-    (pullUrlString (continuousConfigPullUrl continuousConfig))
+    (Left (pullUrlString (continuousConfigPullUrl continuousConfig)))
     (continuousConfigMaxBlobsPerRequest continuousConfig)
     (do logInfo "Updating Hackage index ..."
         forceUpdateHackageIndex Nothing
@@ -419,7 +422,7 @@ populateViaSnapshotTextName :: HasLogFunc env => ContinuousConfig -> Text -> RIO
 populateViaSnapshotTextName continuousConfig snapshotTextName =
   runPantryAppWith
     (continuousConfigConcurrentDownloads continuousConfig)
-    (pullUrlString (continuousConfigPullUrl continuousConfig))
+    (Left (pullUrlString (continuousConfigPullUrl continuousConfig)))
     (continuousConfigMaxBlobsPerRequest continuousConfig)
     (do let unresoledRawSnapshotLocation =
               parseRawSnapshotLocation snapshotTextName
@@ -445,7 +448,7 @@ statusCommand :: HasLogFunc env => RIO env ()
 statusCommand =
   runPantryAppWith
     0
-    defaultCasaPullURL
+    (Right defaultCasaRepoPrefix)
     defaultCasaMaxPerRequest
     (runPantryStorage
        (do count <- allBlobsCount Nothing
@@ -456,7 +459,7 @@ populateCommand :: HasLogFunc env => PopulateConfig -> RIO env ()
 populateCommand populateConfig =
   runPantryAppWith
     (populateConfigConcurrentDownloads populateConfig)
-    (pullUrlString (populateConfigPullUrl populateConfig))
+    (Left (pullUrlString (populateConfigPullUrl populateConfig)))
     defaultCasaMaxPerRequest
     (do rawSnapshot <-
           loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation
@@ -479,15 +482,19 @@ pushCommand config = do
     ("Pushing to " <> fromString (pushUrlString (pushConfigPushUrl config)))
   runPantryAppWith
     (pushConfigConcurrentDownloads config)
-    (pullUrlString (pushConfigPullUrl config))
+    (Left (pullUrlString (pushConfigPullUrl config)))
     (pushConfigMaxBlobsPerRequest config)
     (do blobs <-
           runPantryStorage
             (do count <- allBlobsCount mlastPushedBlobId
+                repoPrefix <- either throwString pure $
+                              parseCasaRepoPrefix $
+                              pushUrlString $
+                              pushConfigPushUrl config
                 if count > 0
                   then do
                     blobsSink
-                      (pushUrlString (pushConfigPushUrl config))
+                      repoPrefix
                       (allBlobsSource mlastPushedBlobId .|
                        CL.mapM
                          (\(blobId, blob) -> do
@@ -634,12 +641,22 @@ getLogOptions verbose = fmap setOptions (logOptionsHandle stderr verbose)
 
 -- | Our wrapper around Pantry's runPantryAppWith, to use our own
 -- logger.
-runPantryAppWith :: HasLogFunc env => Int -> String -> Int -> RIO PantryApp a -> RIO env a
+runPantryAppWith
+  :: HasLogFunc env
+  => Int
+  -> Either String CasaRepoPrefix
+  -> Int
+  -> RIO PantryApp a
+  -> RIO env a
 runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
   logFunc <- asks (view logFuncL)
+  repoPrefix <- either
+    (either throwString pure . parseCasaRepoPrefix)
+    pure
+    casaPullURL
   Pantry.runPantryAppWith
     maxConnCount
-    casaPullURL
+    repoPrefix
     casaMaxPerRequest
     (local (set logFuncL logFunc) f)
 

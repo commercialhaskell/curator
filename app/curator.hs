@@ -3,6 +3,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 import Curator hiding (Snapshot)
 import Data.Yaml (encodeFile, decodeFileThrow)
 import Network.HTTP.Client (httpLbs, newManager, parseUrlThrow, responseBody)
@@ -169,6 +170,24 @@ snapshot = do
   incomplete <- loadPantrySnapshotLayerFile "snapshot-incomplete.yaml"
   complete <- completeSnapshotLayer incomplete
   liftIO $ encodeFile snapshotFilename complete
+
+completeSnapshotLayer
+  :: RawSnapshotLayer
+  -> RIO PantryApp SnapshotLayer
+completeSnapshotLayer RawSnapshotLayer {..} = do
+  slParent <- completeSnapshotLocation rslParent
+  slLocations <- for rslLocations $ \rawLoc -> do
+    cpl <- completePackageLocation rawLoc
+    if cplHasCabalFile cpl
+      then pure $ cplComplete cpl
+      else throwString $ "We're no longer supporting packages without cabal files: " ++ show rawLoc
+  let slCompiler = rslCompiler
+      slDropPackages = rslDropPackages
+      slFlags = rslFlags
+      slHidden = rslHidden
+      slGhcOptions = rslGhcOptions
+      slPublishTime = rslPublishTime
+  pure SnapshotLayer {..}
 
 loadSnapshotYaml :: RIO PantryApp Pantry.Snapshot
 loadSnapshotYaml = do
