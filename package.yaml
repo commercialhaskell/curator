@@ -29,7 +29,7 @@ executables:
   curator:
     ghc-options: -threaded
     source-dirs: app
-    main: Main.hs
+    main: curator.hs
     dependencies:
     - curator
     - http-download
