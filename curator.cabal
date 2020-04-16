@@ -1,0 +1,107 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 94c7ac104e448524f3359793c983f74b6a2c5fcd2af1d083628ef6ce80602d27
+
+name:           curator
+version:        2.0.0.0
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      Curator
+  other-modules:
+      Curator.ApplyPvpRules
+      Curator.Constants
+      Curator.GithubPings
+      Curator.HackageDistro
+      Curator.Legacy
+      Curator.Repo
+      Curator.Snapshot
+      Curator.StackageConstraints
+      Curator.Types
+      Curator.Unpack
+      Curator.UploadDocs
+      Paths_curator
+  hs-source-dirs:
+      src
+  ghc-options: -optP-Wno-nonportable-include-path
+  build-depends:
+      Cabal
+    , base >=4.10 && <5
+    , bytestring
+    , conduit
+    , http-client
+    , http-client-tls
+    , pantry
+    , path
+    , path-io
+    , rio
+    , rio-prettyprint
+    , tar
+    , yaml
+  default-language: Haskell2010
+
+executable casa-curator
+  main-is: casa-curator.hs
+  other-modules:
+      Paths_curator
+  hs-source-dirs:
+      app
+  ghc-options: -optP-Wno-nonportable-include-path -threaded
+  build-depends:
+      aeson
+    , base >=4.10 && <5
+    , casa-client
+    , conduit
+    , containers
+    , curator
+    , http-client
+    , http-client-tls
+    , http-conduit
+    , lens
+    , monad-logger
+    , optparse-applicative
+    , optparse-simple
+    , pantry
+    , path
+    , path-io
+    , persistent
+    , persistent-sqlite
+    , persistent-template
+    , resourcet
+    , rio
+    , rio-orphans
+    , rio-prettyprint
+    , syb
+    , text
+    , time
+    , yaml
+  default-language: Haskell2010
+
+executable curator
+  main-is: curator.hs
+  other-modules:
+      Paths_curator
+  hs-source-dirs:
+      app
+  ghc-options: -optP-Wno-nonportable-include-path -threaded
+  build-depends:
+      base >=4.10 && <5
+    , curator
+    , http-client
+    , http-client-tls
+    , http-download
+    , optparse-simple
+    , pantry
+    , path
+    , path-io
+    , rio
+    , rio-prettyprint
+    , yaml
+  default-language: Haskell2010
