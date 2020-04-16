@@ -30,18 +30,18 @@ jobs:
 
       - name: Extract artifacts
         run: |
-          mkdir -p /artifacts
-          docker run -v /artifacts:/artifacts image cp /usr/local/bin/* /artifacts
-          bzip2 /artifacts/*
+          mkdir -p artifacts
+          docker run -v $(pwd)/artifacts:/artifacts image cp /usr/local/bin/* /artifacts
+          bzip2 artifacts/*
 
       - name: Upload curator executable
         uses: actions/upload-artifact@v1
         with:
           name: curator
-          path: /artifacts/curator.bz2
+          path: artifacts/curator.bz2
 
       - name: Upload casa-curator executable
         uses: actions/upload-artifact@v1
         with:
           name: casa-curator
-          path: /artifacts/casa-curator.bz2
+          path: artifacts/casa-curator.bz2
