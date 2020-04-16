@@ -27,3 +27,19 @@ jobs:
           IMAGE_ID=$IMAGE_ID:$GITHUB_SHA
           docker tag image $IMAGE_ID
           docker push $IMAGE_ID
+
+      - name: Extract artifacts
+        run: |
+          mkdir -p /artifacts
+          docker run -v /artifacts:/artifacts image cp /usr/local/bin/* /artifacts
+          bzip2 /artifacts/*
+
+      - uses: actions/upload-artifact@v1
+        with:
+          name: curator
+          path: /artifacts/curator.bz2
+
+      - uses: actions/upload-artifact@v1
+        with:
+          name: casa-curator
+          path: /artifacts/casa-curator.bz2
