@@ -1,5 +1,7 @@
 # curator
 
+![Runtime image](https://github.com/commercialhaskell/curator/workflows/Runtime%20image/badge.svg)
+
 Snapshot curator tool for, e.g., creating Stackage snapshots.
 
 This is the "curator 2.0", replacing
