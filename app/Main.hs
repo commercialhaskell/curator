@@ -160,8 +160,8 @@ snapshotIncomplete target = do
         TargetLts major minor
           | minor > 0 -> applyPvpRules constraintsNoLts major (minor - 1)
         _ -> pure constraintsNoLts
-    snapshot <- makeSnapshot constraints'
-    liftIO $ encodeFile "snapshot-incomplete.yaml" snapshot
+    snapshot' <- makeSnapshot constraints'
+    liftIO $ encodeFile "snapshot-incomplete.yaml" snapshot'
 
 snapshot :: RIO PantryApp ()
 snapshot = do

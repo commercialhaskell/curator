@@ -21,22 +21,9 @@ library:
   - Curator
   dependencies:
   - Cabal
-  - amazonka
-  - amazonka-s3
-  - blaze-html
   - bytestring
   - conduit
-  - conduit-extra
-  - cryptonite
-  - cryptonite-conduit
-  - html-conduit
-  - memory
-  - mime-types
-  - mtl
-  - resourcet
   - tar
-  - xml-conduit
-  - xml-types
 
 executables:
   curator:
