@@ -649,7 +649,9 @@ populateFromRawSnapshot concurrentDownloads rawSnapshot = do
        logSticky
          ("Loading package: " <> display i <> "/" <> display total <> ": " <>
           display rawPackageLocationImmutable)
-       loadPackageRawDedupe rawPackageLocationImmutable)
+       case rawPackageLocationImmutable of
+         RPLIHackage{} -> logInfo "Skipping already inserted Hackage package"
+         _ -> loadPackageRawDedupe rawPackageLocationImmutable)
   logStickyDone ("Loaded all " <> display total <> " packages.")
 
 -- | Load a snapshot by its unresolved raw snapshot location (the
