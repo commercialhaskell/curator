@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 94c7ac104e448524f3359793c983f74b6a2c5fcd2af1d083628ef6ce80602d27
+-- hash: 6fc720097fe1a215654477b93ac178dc0262f4b5ca99452286366f67e8c89753
 
 name:           curator
 version:        2.0.0.0
@@ -57,6 +57,7 @@ executable casa-curator
   build-depends:
       aeson
     , base >=4.10 && <5
+    , bytestring
     , casa-client
     , conduit
     , containers

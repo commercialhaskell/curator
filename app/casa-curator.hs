@@ -33,6 +33,7 @@ import           Control.Monad.Trans.Resource
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Parser
 import qualified Data.Aeson.Types as Aeson
+import qualified Data.ByteString.Short as Short
 import           Data.Conduit
 import qualified Data.Conduit.List as CL
 import           Data.Generics
@@ -55,6 +56,8 @@ import           Pantry hiding (runPantryAppWith)
 import qualified Pantry as Pantry
 import           Pantry.Internal.Stackage hiding (migrateAll)
 import           RIO
+import qualified RIO.ByteString.Lazy as BL
+import qualified RIO.HashSet as HashSet
 import           RIO.Orphans
 import           RIO.Process
 import           System.Environment
@@ -74,14 +77,35 @@ SnapshotLoaded
 
 data PantryStorage =
   PantryStorage
-    { _pantryStoragePantry :: !PantryApp
+    { _pantryStorageCC :: !CasaCurator
     , _pantryStorageResourceMap :: !ResourceMap
     }
 
+data CasaCurator = CasaCurator
+  { _ccPantryApp :: !PantryApp
+  , _ccDupeSet :: !(IORef (HashSet ShortByteString))
+  }
+
 $(makeLenses ''PantryStorage)
+$(makeLenses ''CasaCurator)
+
+class HasDupeSet env where
+  dupeSetL :: Lens' env (IORef (HashSet ShortByteString))
+
+instance HasLogFunc CasaCurator where
+  logFuncL = ccPantryApp . logFuncL
+
+instance HasProcessContext CasaCurator where
+  processContextL = ccPantryApp . processContextL
+
+instance HasPantryConfig CasaCurator where
+  pantryConfigL = ccPantryApp . pantryConfigL
+
+instance HasDupeSet CasaCurator where
+  dupeSetL = ccDupeSet
 
 instance HasLogFunc PantryStorage where
-  logFuncL = pantryStoragePantry . logFuncL
+  logFuncL = pantryStorageCC . logFuncL
 
 instance HasResourceMap PantryStorage where
   resourceMapL = pantryStorageResourceMap
@@ -365,17 +389,30 @@ getNewHackagePackages continuousConfig = do
           (downloadHackagePackage continuousConfig count)
         logStickyDone "Done downloading packages.")
 
+-- | Load a package, but make sure we haven't already done this one
+loadPackageRawDedupe
+  :: (HasLogFunc env, HasPantryConfig env, HasProcessContext env, HasDupeSet env)
+  => RawPackageLocationImmutable
+  -> RIO env ()
+loadPackageRawDedupe rpli = do
+  let sbs :: ShortByteString = Short.toShort $ BL.toStrict $ Aeson.encode rpli
+  ref <- view dupeSetL
+  join $ atomicModifyIORef' ref $ \hs ->
+    if sbs `HashSet.member` hs
+      then (hs, logInfo $ "Skipping already added package " <> display rpli)
+      else (HashSet.insert sbs hs, void $ loadPackageRaw rpli)
+
 downloadHackagePackage ::
   (Display a2, Display a1) =>
   ContinuousConfig
   -> a1
   -> (a2, (HackageCabalId, RawPackageLocationImmutable))
-  -> RIO PantryApp ()
+  -> RIO CasaCurator ()
 downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
   logSticky ("[" <> display i <> "/" <> display count <> "] " <> display rpli)
   attempt
   where
-    logit :: Exception e => e -> RIO PantryApp ()
+    logit :: Exception e => e -> RIO CasaCurator ()
     logit e =
       logStickyDone
         ("[" <> display i <> "/" <> display count <> "] " <>
@@ -384,7 +421,7 @@ downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
       catch
         (catch
            (void
-              (do loadPackageRaw rpli
+              (do loadPackageRawDedupe rpli
                   withContinuousProcessDb
                     (continuousConfigSqliteFile continuousConfig)
                     (do deleteWhere ([] :: [Filter LastDownloaded])
@@ -598,7 +635,7 @@ snapshotsParser j = do
 
 -- | Populate the database with packages from a raw snapshot.
 populateFromRawSnapshot ::
-     (HasLogFunc env, HasPantryConfig env, HasProcessContext env)
+     (HasLogFunc env, HasPantryConfig env, HasProcessContext env, HasDupeSet env)
   => Int
   -> RawSnapshot
   -> RIO env ()
@@ -612,7 +649,7 @@ populateFromRawSnapshot concurrentDownloads rawSnapshot = do
        logSticky
          ("Loading package: " <> display i <> "/" <> display total <> ": " <>
           display rawPackageLocationImmutable)
-       loadPackageRaw rawPackageLocationImmutable)
+       loadPackageRawDedupe rawPackageLocationImmutable)
   logStickyDone ("Loaded all " <> display total <> " packages.")
 
 -- | Load a snapshot by its unresolved raw snapshot location (the
@@ -646,7 +683,7 @@ runPantryAppWith
   => Int
   -> Either String CasaRepoPrefix
   -> Int
-  -> RIO PantryApp a
+  -> RIO CasaCurator a
   -> RIO env a
 runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
   logFunc <- asks (view logFuncL)
@@ -658,18 +695,24 @@ runPantryAppWith maxConnCount casaPullURL casaMaxPerRequest f = do
     maxConnCount
     repoPrefix
     casaMaxPerRequest
-    (local (set logFuncL logFunc) f)
+    (do pa <- ask
+        dupeSet <- newIORef mempty
+        let cc = CasaCurator
+                { _ccPantryApp = set logFuncL logFunc pa
+                , _ccDupeSet = dupeSet
+                }
+        runRIO cc f)
 
 -- | Run database access inside Pantry's database.
-runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO PantryApp a
+runPantryStorage :: ReaderT SqlBackend (RIO PantryStorage) a -> RIO CasaCurator a
 runPantryStorage action' = do
-  pantryApp <- ask
+  cc <- ask
   storage <- fmap (pcStorage . view pantryConfigL) ask
   withResourceMap
     (\resourceMap ->
        runRIO
          (PantryStorage
-            {_pantryStorageResourceMap = resourceMap, _pantryStoragePantry = pantryApp})
+            {_pantryStorageResourceMap = resourceMap, _pantryStorageCC = cc})
          (withStorage_
             storage
             action'))

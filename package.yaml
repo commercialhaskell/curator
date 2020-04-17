@@ -39,6 +39,7 @@ executables:
     main: casa-curator.hs
     source-dirs: app
     dependencies:
+      - bytestring
       - curator
       - casa-client
       - conduit
