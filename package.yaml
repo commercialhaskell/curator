@@ -19,6 +19,7 @@ library:
   source-dirs: src
   exposed-modules:
   - Curator
+  - Curator.Snapshot
   dependencies:
   - Cabal
   - bytestring
@@ -58,3 +59,14 @@ executables:
       - persistent-template
       - time
       - monad-logger
+
+tests:
+  spec:
+    source-dirs: test
+    main: Spec.hs
+    dependencies:
+    - Cabal
+    - curator
+    - containers
+    - hspec
+    - text

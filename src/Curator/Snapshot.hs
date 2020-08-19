@@ -4,7 +4,10 @@
 module Curator.Snapshot
   ( makeSnapshot
   , checkDependencyGraph
+  , pkgBoundsError
   , snapshotVersion
+  , DependingPackage(..)
+  , DepBounds(..)
   ) where
 
 import Curator.GithubPings
@@ -267,7 +270,7 @@ pkgBoundsError dep maintainers mdepVer isBoot users =
         ) :
         if null dpGithubPings
         then []
-        else [T.concat (map (T.cons '@') (Set.toList dpGithubPings))]
+        else [T.intercalate " " $ (map (T.cons '@') (Set.toList dpGithubPings))]
 
     compToText :: Component -> Text
     compToText CompLibrary = "library"
