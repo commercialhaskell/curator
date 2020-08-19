@@ -12,8 +12,8 @@ import Test.Hspec
 spec :: Spec
 spec = do
   describe "pkgBoundsError" $
-    context "when there is more than one github pin" $
-      it "returns github pins separated by spaces" $ do
+    context "when there is more than one github ping" $
+      it "returns github pings separated by spaces" $ do
         let pkg = mkPackageName "package1"
         let maintainers = S.fromList ["jsl", "fl", "fm"]
         let version = Nothing
