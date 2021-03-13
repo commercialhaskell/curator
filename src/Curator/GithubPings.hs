@@ -5,6 +5,7 @@ module Curator.GithubPings
 
 import Curator.Types
 import Distribution.PackageDescription
+import Distribution.Utils.ShortText (fromShortText)
 import RIO
 import RIO.List (stripPrefix)
 import qualified RIO.Map as Map
@@ -21,7 +22,7 @@ getGithubPings :: GenericPackageDescription -> Set Text
 getGithubPings gpd =
         Set.fromList $
         map T.pack $
-        goHomepage (homepage $ packageDescription gpd) ++
+        goHomepage (fromShortText . homepage $ packageDescription gpd) ++
         concatMap goRepo (sourceRepos $ packageDescription gpd)
   where
     goHomepage t = do

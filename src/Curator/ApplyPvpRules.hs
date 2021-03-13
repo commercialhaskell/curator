@@ -32,3 +32,7 @@ applyPvpRules constraints0 major minor = do
   let goPC name pc = pc { pcSource = goSource name $ pcSource pc }
   let packages = Map.mapWithKey goPC $ consPackages constraints0
   pure constraints0 { consPackages = packages }
+
+-- HELP
+ltsSnapshotLocation :: Int -> Int -> RawSnapshotLocation
+ltsSnapshotLocation = undefined

@@ -29,16 +29,16 @@ library:
 executables:
   curator:
     ghc-options: -threaded
-    source-dirs: app
-    main: curator.hs
+    source-dirs: app-curator
+    main: Main.hs
     dependencies:
     - curator
     - http-download
     - optparse-simple
   casa-curator:
     ghc-options: -threaded
-    main: casa-curator.hs
-    source-dirs: app
+    main: Main.hs
+    source-dirs: app-casa-curator
     dependencies:
       - bytestring
       - curator
