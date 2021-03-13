@@ -7,6 +7,7 @@
 module Curator.StackageConstraints
   ( loadStackageConstraints
   , loadStackageConstraintsBs
+  , SC (..)
   ) where
 
 import Pantry

@@ -9,7 +9,7 @@ module Curator.Constants
 import RIO (Text, fromString)
 
 snapshotFilename :: FilePath
-snapshotFilename = "snapshot.yaml" 
+snapshotFilename = "snapshot.yaml"
 
 constraintsFilename :: FilePath
 constraintsFilename = "constraints.yaml"

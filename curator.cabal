@@ -22,6 +22,7 @@ library
       Curator.Legacy
       Curator.Repo
       Curator.StackageConstraints
+      Curator.StackageConstraintsV2
       Curator.Types
       Curator.Unpack
       Curator.UploadDocs
