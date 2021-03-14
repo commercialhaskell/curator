@@ -105,6 +105,11 @@ what V1 is, but apart from the initial work needed I don't think
 that's much of an issue. I would prefer to not have to do this... but
 I think it's necessary to keep people sane.
 
+EDIT: Another idea which I would prefer. Extend `curator` with some
+helper commands to do these. E.g. `curator disable <package>
+<comment>`. I'd need to test how the decode/encode round trip behaves,
+I don't want it to arbitrarily reorder everything all of the time.
+
 ### Range shorthand
 We can still allow `- package < range` for bounds as well as `range:`
 if no other properties are set. I'd lean towards not allowing it as
