@@ -1,10 +1,8 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.3.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 43bba8e20592385576140d327b5beecfae064ffc7c167ba6f956ef670f47fa34
 
 name:           curator
 version:        2.0.0.0
@@ -48,11 +46,11 @@ library
   default-language: Haskell2010
 
 executable casa-curator
-  main-is: casa-curator.hs
+  main-is: Main.hs
   other-modules:
       Paths_curator
   hs-source-dirs:
-      app
+      app-casa-curator
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
       aeson
@@ -86,11 +84,11 @@ executable casa-curator
   default-language: Haskell2010
 
 executable curator
-  main-is: curator.hs
+  main-is: Main.hs
   other-modules:
       Paths_curator
   hs-source-dirs:
-      app
+      app-curator
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
       base >=4.10 && <5

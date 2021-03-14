@@ -15,7 +15,7 @@ applyPvpRules
   -> Int -- ^ LTS previous minor version
   -> RIO PantryApp Constraints
 applyPvpRules constraints0 major minor = do
-  (snapshot, _, _) <- loadAndCompleteSnapshotRaw (ltsSnapshotLocation major minor) mempty mempty
+  (snapshot, _, _) <- loadAndCompleteSnapshotRaw (defaultSnapshotLocation $ LTS major minor) mempty mempty
   let getBounds name =
         case Map.lookup name $ snapshotPackages snapshot of
           Nothing -> Nothing

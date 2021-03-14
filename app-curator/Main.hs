@@ -4,6 +4,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
+
+module Main where
+
 import Curator hiding (Snapshot)
 import Data.Yaml (encodeFile, decodeFileThrow)
 import Network.HTTP.Client (httpLbs, newManager, parseUrlThrow, responseBody)
