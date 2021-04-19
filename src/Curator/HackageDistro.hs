@@ -5,6 +5,7 @@ module Curator.HackageDistro
 
 import Curator.Types
 import Data.ByteString.Builder (toLazyByteString)
+import Distribution.Types.PackageName
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Pantry
@@ -58,10 +59,8 @@ uploadDistro name packages username password manager = do
         $ map go
         $ Map.toList packages
     go (name', version) =
-        "\"" <>
-        displayShow name' <>
-        "\",\"" <>
-        displayShow version <>
-        "\",\"https://www.stackage.org/package/" <>
-        displayShow name' <>
-        "\""
+       displayShow (unPackageName name') <>
+        "," <>
+        displayShow (versionString version) <>
+        "," <>
+        displayShow ("https://www.stackage.org/package/" <> unPackageName name')
