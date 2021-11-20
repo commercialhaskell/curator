@@ -14,7 +14,7 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Download (download)
 import Options.Applicative.Simple hiding (action)
 import qualified Pantry
-import Path (toFilePath)
+import Path ((</>), addExtension, toFilePath, Path, Abs, File)
 import Path.IO (doesFileExist, removeFile, resolveFile', resolveDir')
 import Paths_curator (version)
 import qualified RIO.ByteString.Lazy as BL
@@ -119,41 +119,50 @@ update = do
   void $ updateHackageIndex $ Just "Updating hackage index"
 
 constraints :: Target -> RIO PantryApp ()
-constraints target =
-  case target of
-    TargetLts x y | y > 0 -> do
-      let prev = y - 1
-          url = concat [ "https://raw.githubusercontent.com/" ++ constraintsRepo ++ "/master/lts/"
-                        , show x
-                        , "/"
-                        , show prev
-                        , ".yaml"
-                        ]
-      logInfo $ "Will reuse constraints.yaml from lts-" <> display x <> "." <> display prev
-      req <- parseUrlThrow url
-      constraintsPath <- resolveFile' constraintsFilename
-      exists <- doesFileExist constraintsPath
-      when exists $ do
-        logWarn "Local constraints file will be deleted before downloading reused constraints"
-        removeFile constraintsPath
-      downloaded <- download req constraintsPath
-      unless downloaded $
-        error $ "Could not download constraints.yaml from " <> url
-    _ -> do
-      buildConstraintsPath <- resolveFile' "build-constraints.yaml"
-      exists <- doesFileExist buildConstraintsPath
-      stackageConstraints <- if exists
-        then do
-          logInfo "Reusing already existing file build-constraints.yaml"
-          loadStackageConstraints $ toFilePath buildConstraintsPath
-        else do
-          logInfo $ "Downloading build-constraints from commercialhaskell/stackage"
-          req <- parseUrlThrow "https://raw.githubusercontent.com/commercialhaskell/stackage/master/build-constraints.yaml"
-          man <- liftIO $ newManager tlsManagerSettings
-          liftIO (httpLbs req man) >>=
-            loadStackageConstraintsBs . BL.toStrict . responseBody
-      logInfo "Writing constraints.yaml"
-      liftIO $ encodeFile constraintsFilename stackageConstraints
+constraints target = do
+  buildConstraintsPath <- case target of
+    TargetNightly _ -> resolveFile' "build-constraints.yaml"
+    TargetLts major minor -> do
+      when (minor > 0) $ do
+        verifyPreviousLtsMinorExists major minor
+      resolveFile' "lts-build-constraints.yaml"
+  exists <- doesFileExist buildConstraintsPath
+  stackageConstraints <- if exists
+    then do
+      logInfo $ "Reusing already existing file " <> fromString (toFilePath buildConstraintsPath)
+      loadStackageConstraints $ toFilePath buildConstraintsPath
+    else do
+      logInfo $ "Downloading " <> fromString (toFilePath buildConstraintsPath)
+        <> " from commercialhaskell/stackage"
+      req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/stackage/master/"
+        <> toFilePath buildConstraintsPath
+      man <- liftIO $ newManager tlsManagerSettings
+      liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
+  logInfo "Writing constraints.yaml"
+  liftIO $ encodeFile constraintsFilename stackageConstraints
+
+-- Performs a download of the previous LTS minor just to verify that it has been published.
+verifyPreviousLtsMinorExists :: Int -> Int -> RIO PantryApp ()
+verifyPreviousLtsMinorExists major minor = do
+  let prevMinor = minor - 1
+      url = concat
+        [ "https://raw.githubusercontent.com/" ++ constraintsRepo ++ "/master/lts/"
+        , show major
+        , "/"
+        , show prevMinor
+        , ".yaml"
+        ]
+  -- Hacky, use a presumably unique file name for this download (the file is not used).
+  constraintsPath <- addExtension "previous" =<< resolveFile' constraintsFilename
+  exists <- doesFileExist constraintsPath
+  when exists $
+    removeFile constraintsPath
+  logInfo $ "Verifying existance of constraints.yaml from "
+    <> "lts-" <> display major <> "." <> display prevMinor
+  req <- parseUrlThrow url
+  downloaded <- download req constraintsPath
+  unless downloaded $
+    error $ "Could not download constraints.yaml from " <> url
 
 snapshotIncomplete :: Target -> RIO PantryApp ()
 snapshotIncomplete target = do
