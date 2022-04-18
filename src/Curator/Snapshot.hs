@@ -10,7 +10,6 @@ module Curator.Snapshot
   , DepBounds(..)
   ) where
 
-import Curator.GithubPings
 import Curator.Types
 import Distribution.Compiler (CompilerFlavor(..))
 import Distribution.InstalledPackageInfo (InstalledPackageInfo(..))
@@ -265,12 +264,9 @@ pkgBoundsError dep maintainers mdepVer isBoot users =
     depPackageShow2 :: DependingPackage -> Text
     depPackageShow2 DependingPackage {..} = T.intercalate ". " $
         ( if null dpMaintainers
-          then "No maintainer"
+          then "No stackage maintainer"
           else T.intercalate ", " (Set.toList dpMaintainers)
-        ) :
-        if null dpGithubPings
-        then []
-        else [T.intercalate " " $ (map (T.cons '@') (Set.toList dpGithubPings))]
+        ) : []
 
     compToText :: Component -> Text
     compToText CompLibrary = "library"
@@ -301,7 +297,6 @@ data DependingPackage = DependingPackage
   { dpName :: !PackageName
   , dpVersion :: !(Maybe Version)
   , dpMaintainers :: !(Set Maintainer)
-  , dpGithubPings :: !(Set Text)
   } deriving (Eq, Ord)
 
 data DepBounds = DepBounds
@@ -315,7 +310,6 @@ data PkgInfo = PkgInfo
   , piTreeDeps :: ![PackageName]
   , piCabalVersion :: !Version
   , piMaintainers :: !(Set Maintainer)
-  , piGithubPings :: !(Set Text)
   }
 
 splitErrors ::
@@ -422,7 +416,6 @@ getPkgInfo constraints compilerVer pname sp = do
       , piTreeDeps = treeDeps
       , piCabalVersion = C.specVersion $ C.packageDescription gpd
       , piMaintainers = maybe mempty pcMaintainers mpc
-      , piGithubPings = applyGithubMapping constraints $ getGithubPings gpd
       }
 
 validatePackage ::
@@ -462,7 +455,6 @@ validatePackage constraints depTree cabalVersion pname pkg =
                   { dpName = pname
                   , dpVersion = piVersion pkg
                   , dpMaintainers = piMaintainers pkg --maybe mempty pcMaintainers mpc
-                  , dpGithubPings = piGithubPings pkg --pings
                   }
               , redDependingBounds = DepBounds depRange (Set.singleton component)
               }

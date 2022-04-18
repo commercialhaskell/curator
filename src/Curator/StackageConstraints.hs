@@ -55,9 +55,6 @@ data SC = SC
   , scSkippedHaddocks :: !(Set PackageName)
   -- ^ Sometimes Haddock is really flaky
 
-  , scGithubUsers :: !(Map Text (Set Text))
-  -- ^ Mapping from Github org to users who will receive pings
-
   , scTellMeWhenItsReleased :: !(Map PackageName Version)
 
   , scHide :: !(Set PackageName)
@@ -85,8 +82,6 @@ instance FromJSON SC where
     scExpectedTestFailures <- Set.map unCabalString <$> o .: "expected-test-failures"
     scExpectedBenchmarkFailures <- Set.map unCabalString <$> o .: "expected-benchmark-failures"
     scExpectedHaddockFailures <- Set.map unCabalString <$> o .: "expected-haddock-failures"
-
-    scGithubUsers <- o .: "github-users"
 
     scHide <- Set.map unCabalString <$> o .: "hide"
     scNoRevisions <- Set.map unCabalString <$> o .: "no-revisions"
@@ -149,7 +144,6 @@ convert sc0 = do
   pure Constraints
     { consGhcVersion = scGhcVersion sc1
     , consPackages = packages
-    , consGithubUsers = scGithubUsers sc1
     }
   where
     go :: (SC, Map PackageName PackageConstraints, [String])
