@@ -14,7 +14,7 @@ module Curator.Snapshot
 
 import Curator.Types
 #if MIN_VERSION_Cabal(3,4,0)
-import Distribution.CabalSpecVersion (CabalSpecVersion, cabalSpecFromVersionDigits)
+import Distribution.CabalSpecVersion (CabalSpecVersion, cabalSpecToVersionDigits)
 import Distribution.FieldGrammar.Newtypes (SpecVersion(SpecVersion))
 import Distribution.Pretty as C (Pretty(..))
 #endif
@@ -177,7 +177,7 @@ checkDependencyGraph constraints snapshot = do
       Nothing -> cabalError "Cabal not found in snapshot"
       Just Nothing -> cabalError "Cabal version in snapshot is not defined"
 #if MIN_VERSION_Cabal(3,4,0)
-      Just (Just v) | Just cabalVersion <- cabalSpecFromVersionDigits $ versionNumbers v -> do
+      Just (Just v) | let cabalVersion = cabalVersionToSpecVersion v -> do
 #else
       Just (Just cabalVersion) -> do
 #endif
@@ -580,7 +580,22 @@ wiredInGhcPackages =
         ]
 
 #if MIN_VERSION_Cabal(3,4,0)
--- Orphan which imo missing in the Cabal package, see https://github.com/haskell/cabal/issues/9066
+-- Orphan which is imo missing in the Cabal API, see https://github.com/haskell/cabal/issues/9066.
 instance C.Pretty CabalSpecVersion where
   pretty = C.pretty . SpecVersion
+
+-- The following function is imo missing in the Cabal API, see https://github.com/haskell/cabal/issues/9067.
+
+-- | Robustly convert a Cabal version number into a 'CabalSpecVersion'.
+--
+-- Picks the greatest spec version less or equal than the given Cabal version.
+-- If none such exists, returns the minimal 'CabalSpecVersion'.
+--
+cabalVersionToSpecVersion :: Version -> CabalSpecVersion
+cabalVersionToSpecVersion =
+  maybe minBound snd . (`Map.lookupLE` cabalVersionToSpec) . versionNumbers
+  where
+    cabalVersionToSpec :: Map [Int] CabalSpecVersion
+    cabalVersionToSpec = Map.fromList $  -- This should be fromAscList, but RIO.Map does not have it yet (unlike Data.Map).
+      map (\ v -> (cabalSpecToVersionDigits v, v)) [minBound..maxBound]
 #endif
