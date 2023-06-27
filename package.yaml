@@ -15,6 +15,9 @@ dependencies:
 - rio-prettyprint
 - yaml
 
+default-extensions:
+- TypeOperators
+
 library:
   source-dirs: src
   exposed-modules:
@@ -22,6 +25,7 @@ library:
   - Curator.Snapshot
   dependencies:
   - Cabal
+  - aeson
   - bytestring
   - conduit
   - tar
