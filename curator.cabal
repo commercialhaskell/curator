@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.2.
 --
 -- see: https://github.com/sol/hpack
 
@@ -27,9 +27,12 @@ library
       Paths_curator
   hs-source-dirs:
       src
+  default-extensions:
+      TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path
   build-depends:
       Cabal
+    , aeson
     , base >=4.10 && <5
     , bytestring
     , conduit
@@ -50,6 +53,8 @@ executable casa-curator
       Paths_curator
   hs-source-dirs:
       app-casa-curator
+  default-extensions:
+      TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
       aeson
@@ -88,6 +93,8 @@ executable curator
       Paths_curator
   hs-source-dirs:
       app-curator
+  default-extensions:
+      TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
       base >=4.10 && <5
@@ -112,6 +119,8 @@ test-suite spec
       Paths_curator
   hs-source-dirs:
       test
+  default-extensions:
+      TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path
   build-depends:
       Cabal

@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Curator.Types
   ( Constraints (..)
   , PackageConstraints (..)
@@ -20,6 +22,12 @@ import Data.Yaml
 import qualified RIO.Map as Map
 import qualified RIO.Set as Set
 import RIO.Time
+
+#if MIN_VERSION_aeson(2,0,0)
+import Data.Aeson.Key (Key)
+#else
+type Key = Text
+#endif
 
 type Maintainer = Text
 
@@ -94,6 +102,7 @@ data PackageSource
   = PSHackage !HackageSource
   | PSUrl !Text
   deriving Show
+
 instance ToJSON PackageSource where
   toJSON (PSHackage hs) = object $ ("type" .= ("hackage" :: Text)) : hsToPairs hs
   toJSON (PSUrl url) = object
@@ -121,7 +130,7 @@ data HackageSource = HackageSource
   }
   deriving Show
 
-hsToPairs :: HackageSource -> [(Text, Value)]
+hsToPairs :: HackageSource -> [(Key, Value)]
 hsToPairs hs = concat
   [ maybe [] (\range -> ["range" .= CabalString range]) (hsRange hs)
   , maybe [] (\v -> ["required-latest" .= CabalString v]) (hsRequiredLatest hs)
