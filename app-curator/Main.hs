@@ -230,7 +230,15 @@ build jobs = do
   logInfo "Building"
   withWorkingDir unpackDir $ proc
     "stack"
-    (words $ "--terminal build --test --bench --test-suite-timeout=600 --no-rerun-tests --no-run-benchmarks --haddock --no-dump-logs --no-interleaved-output --jobs=" ++ show jobs)
+    ["--terminal",
+     "build",
+     "--test", "--test-suite-timeout=600", "--no-rerun-tests",
+     "--bench", "--no-run-benchmarks",
+     "--haddock",
+     "--no-interleaved-output",
+     "--ghc-options", "-w",
+     "--jobs=" ++ show jobs
+    ]
     runProcess_
 
 hackageDistro :: Target -> RIO PantryApp ()
