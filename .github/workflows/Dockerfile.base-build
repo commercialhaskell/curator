@@ -3,7 +3,7 @@ FROM fpco/pid1:20.04
 ENV LANG C.UTF-8
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt update && \
-    apt upgrade && \
+    apt upgrade -y && \
     apt install curl pkg-config -y && \
     curl -sSL https://get.haskellstack.org/ | sh && \
     unset DEBIAN_FRONTEND
