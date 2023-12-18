@@ -153,7 +153,7 @@ verifyPreviousLtsMinorExists major minor = do
         , ".yaml"
         ]
   -- Hacky, use a presumably unique file name for this download (the file is not used).
-  constraintsPath <- addExtension "previous" =<< resolveFile' constraintsFilename
+  constraintsPath <- addExtension ".previous" =<< resolveFile' constraintsFilename
   exists <- doesFileExist constraintsPath
   when exists $
     removeFile constraintsPath
