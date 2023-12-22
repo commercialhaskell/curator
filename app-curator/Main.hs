@@ -125,7 +125,7 @@ constraints target = do
     TargetLts major minor -> do
       when (minor > 0) $ do
         verifyPreviousLtsMinorExists major minor
-      resolveFile' "lts-build-constraints.yaml"
+      resolveFile' $ "lts-" <> show major <> "-build-constraints.yaml"
   exists <- doesFileExist buildConstraintsPath
   stackageConstraints <- if exists
     then do
