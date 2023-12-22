@@ -10,10 +10,10 @@ jobs:
     if: github.event_name == 'push'
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Log into Github registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build image
         run: docker build . -f .github/workflows/Dockerfile.runtime --tag image
@@ -35,19 +35,19 @@ jobs:
           bzip2 artifacts/*
 
       - name: Upload curator executable
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v3
         with:
           name: curator
           path: artifacts/curator.bz2
 
       - name: Upload casa-curator executable
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v3
         with:
           name: casa-curator
           path: artifacts/casa-curator.bz2
 
       - name: Publish artifacts
-        uses: svenstaro/upload-release-action@v1-release
+        uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: artifacts/*

@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Curator.Types
   ( Constraints (..)
   , PackageConstraints (..)
@@ -21,12 +23,17 @@ import qualified RIO.Map as Map
 import qualified RIO.Set as Set
 import RIO.Time
 
+#if MIN_VERSION_aeson(2,0,0)
+import Data.Aeson.Key (Key)
+#else
+type Key = Text
+#endif
+
 type Maintainer = Text
 
 data Constraints = Constraints
   { consGhcVersion :: !Version
   , consPackages :: !(Map PackageName PackageConstraints)
-  , consGithubUsers :: !(Map Text (Set Text))
   }
   deriving Show
 
@@ -34,13 +41,11 @@ instance ToJSON Constraints where
   toJSON c = object
     [ "ghc-version" .= CabalString (consGhcVersion c)
     , "packages" .= toCabalStringMap (consPackages c)
-    , "github-users" .= consGithubUsers c
     ]
 instance FromJSON Constraints where
   parseJSON = withObject "Constraints" $ \o -> Constraints
     <$> fmap unCabalString (o .: "ghc-version")
     <*> fmap unCabalStringMap (o .: "packages")
-    <*> o .: "github-users"
 
 data PackageConstraints = PackageConstraints
   { pcMaintainers :: !(Set Maintainer)
@@ -97,6 +102,7 @@ data PackageSource
   = PSHackage !HackageSource
   | PSUrl !Text
   deriving Show
+
 instance ToJSON PackageSource where
   toJSON (PSHackage hs) = object $ ("type" .= ("hackage" :: Text)) : hsToPairs hs
   toJSON (PSUrl url) = object
@@ -124,7 +130,7 @@ data HackageSource = HackageSource
   }
   deriving Show
 
-hsToPairs :: HackageSource -> [(Text, Value)]
+hsToPairs :: HackageSource -> [(Key, Value)]
 hsToPairs hs = concat
   [ maybe [] (\range -> ["range" .= CabalString range]) (hsRange hs)
   , maybe [] (\v -> ["required-latest" .= CabalString v]) (hsRequiredLatest hs)

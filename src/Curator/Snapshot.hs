@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
+
 module Curator.Snapshot
   ( makeSnapshot
   , checkDependencyGraph
@@ -10,8 +12,12 @@ module Curator.Snapshot
   , DepBounds(..)
   ) where
 
-import Curator.GithubPings
 import Curator.Types
+#if MIN_VERSION_Cabal(3,4,0)
+import Distribution.CabalSpecVersion (CabalSpecVersion, cabalSpecToVersionDigits)
+import Distribution.FieldGrammar.Newtypes (SpecVersion(SpecVersion))
+import Distribution.Pretty as C (Pretty(..))
+#endif
 import Distribution.Compiler (CompilerFlavor(..))
 import Distribution.InstalledPackageInfo (InstalledPackageInfo(..))
 import qualified Distribution.PackageDescription as C
@@ -29,6 +35,9 @@ import Distribution.Types.Dependency (depPkgName, depVerRange, Dependency(..))
 import Distribution.Types.ExeDependency (ExeDependency(..))
 import Distribution.Types.UnitId
 import Distribution.Types.UnqualComponentName (unqualComponentNameToPackageName)
+#if MIN_VERSION_Cabal(3,4,0)
+import Distribution.Types.Version (versionNumbers)
+#endif
 import Distribution.Types.VersionRange (thisVersion, withinRange, VersionRange)
 import Distribution.Verbosity (silent)
 import Pantry
@@ -163,13 +172,15 @@ checkDependencyGraph constraints snapshot = do
     let ghcBootPackages = prunedBootPackages ghcBootPackages0 (Map.keysSet snapshotPackages)
         declared = snapshotPackages <> Map.map (Just . bpVersion) ghcBootPackages
         cabalName = "Cabal"
-        -- cabalError err = pure . Map.singleton cabalName $ [OtherError err]
+        cabalError err = pure . Map.singleton cabalName $ [OtherError err]
     pkgErrors <- case Map.lookup cabalName declared of
-      Nothing -> pure Map.empty
-        -- cabalError "Cabal not found in snapshot"
-      Just Nothing -> pure Map.empty
-        -- cabalError "Cabal version in snapshot is not defined"
+      Nothing -> cabalError "Cabal not found in snapshot"
+      Just Nothing -> cabalError "Cabal version in snapshot is not defined"
+#if MIN_VERSION_Cabal(3,4,0)
+      Just (Just v) | let cabalVersion = cabalVersionToSpecVersion v -> do
+#else
       Just (Just cabalVersion) -> do
+#endif
         let isWiredIn pn _ = pn `Set.member` wiredInGhcPackages
             (wiredIn, packages) =
               Map.partitionWithKey isWiredIn (Pantry.snapshotPackages snapshot)
@@ -265,12 +276,9 @@ pkgBoundsError dep maintainers mdepVer isBoot users =
     depPackageShow2 :: DependingPackage -> Text
     depPackageShow2 DependingPackage {..} = T.intercalate ". " $
         ( if null dpMaintainers
-          then "No maintainer"
+          then "No stackage maintainer"
           else T.intercalate ", " (Set.toList dpMaintainers)
-        ) :
-        if null dpGithubPings
-        then []
-        else [T.intercalate " " $ (map (T.cons '@') (Set.toList dpGithubPings))]
+        ) : []
 
     compToText :: Component -> Text
     compToText CompLibrary = "library"
@@ -301,7 +309,6 @@ data DependingPackage = DependingPackage
   { dpName :: !PackageName
   , dpVersion :: !(Maybe Version)
   , dpMaintainers :: !(Set Maintainer)
-  , dpGithubPings :: !(Set Text)
   } deriving (Eq, Ord)
 
 data DepBounds = DepBounds
@@ -313,9 +320,12 @@ data PkgInfo = PkgInfo
   { piVersion :: !(Maybe Version)
   , piAllDeps :: ![(Component, [Dependency])]
   , piTreeDeps :: ![PackageName]
+#if MIN_VERSION_Cabal(3,4,0)
+  , piCabalVersion :: !CabalSpecVersion
+#else
   , piCabalVersion :: !Version
+#endif
   , piMaintainers :: !(Set Maintainer)
-  , piGithubPings :: !(Set Text)
   }
 
 splitErrors ::
@@ -354,7 +364,11 @@ checkConditions compilerVer pname flags confVar =
     case confVar of
         C.OS os -> return $ os == targetOS
         C.Arch arch -> return $ arch == targetArch
+#if MIN_VERSION_Cabal(3,4,0)
+        C.PackageFlag flag ->
+#else
         C.Flag flag ->
+#endif
             case Map.lookup flag flags of
                 Nothing ->
                     error $
@@ -381,7 +395,11 @@ getPkgInfo constraints compilerVer pname sp = do
         setupDepends = maybe mempty C.setupDepends $
                        C.setupBuildInfo (C.packageDescription gpd)
         -- TODO: we should also check executable names, not only their packages
+#if MIN_VERSION_Cabal(3,4,0)
+        buildInfoDeps = map (\(ExeDependency p _ vr) -> Dependency p vr C.mainLibSet) . C.buildToolDepends
+#else
         buildInfoDeps = map (\(ExeDependency p _ vr) -> Dependency p vr Set.empty) . C.buildToolDepends
+#endif
         gpdFlags = Map.fromList $ map (C.flagName &&& C.flagDefault) (C.genPackageFlags gpd)
         checkCond = checkConditions compilerVer pname $ maybe mempty pcFlags mpc <> gpdFlags
         collectDeps0 :: Monoid a
@@ -422,13 +440,16 @@ getPkgInfo constraints compilerVer pname sp = do
       , piTreeDeps = treeDeps
       , piCabalVersion = C.specVersion $ C.packageDescription gpd
       , piMaintainers = maybe mempty pcMaintainers mpc
-      , piGithubPings = applyGithubMapping constraints $ getGithubPings gpd
       }
 
 validatePackage ::
        Constraints
     -> Map PackageName (Maybe Version, [PackageName])
+#if MIN_VERSION_Cabal(3,4,0)
+    -> CabalSpecVersion
+#else
     -> Version
+#endif
     -> PackageName
     -> PkgInfo
     -> [DependencyError]
@@ -462,7 +483,6 @@ validatePackage constraints depTree cabalVersion pname pkg =
                   { dpName = pname
                   , dpVersion = piVersion pkg
                   , dpMaintainers = piMaintainers pkg --maybe mempty pcMaintainers mpc
-                  , dpGithubPings = piGithubPings pkg --pings
                   }
               , redDependingBounds = DepBounds depRange (Set.singleton component)
               }
@@ -558,3 +578,24 @@ wiredInGhcPackages =
         , "ghc"
         , "interactive"
         ]
+
+#if MIN_VERSION_Cabal(3,4,0)
+-- Orphan which is imo missing in the Cabal API, see https://github.com/haskell/cabal/issues/9066.
+instance C.Pretty CabalSpecVersion where
+  pretty = C.pretty . SpecVersion
+
+-- The following function is imo missing in the Cabal API, see https://github.com/haskell/cabal/issues/9067.
+
+-- | Robustly convert a Cabal version number into a 'CabalSpecVersion'.
+--
+-- Picks the greatest spec version less or equal than the given Cabal version.
+-- If none such exists, returns the minimal 'CabalSpecVersion'.
+--
+cabalVersionToSpecVersion :: Version -> CabalSpecVersion
+cabalVersionToSpecVersion =
+  maybe minBound snd . (`Map.lookupLE` cabalVersionToSpec) . versionNumbers
+  where
+    cabalVersionToSpec :: Map [Int] CabalSpecVersion
+    cabalVersionToSpec = Map.fromList $  -- This should be fromAscList, but RIO.Map does not have it yet (unlike Data.Map).
+      map (\ v -> (cabalSpecToVersionDigits v, v)) [minBound..maxBound]
+#endif

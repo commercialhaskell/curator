@@ -47,6 +47,7 @@ uploadDocs input' name bucket = do
       "aws"
       [ "s3"
       , "cp"
+      , "--only-show-errors"
       , "--recursive"
       , "--acl"
       , "public-read"
