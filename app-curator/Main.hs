@@ -120,26 +120,36 @@ update = do
 
 constraints :: Target -> RIO PantryApp ()
 constraints target = do
-  buildConstraintsPath <- case target of
-    TargetNightly _ -> resolveFile' "build-constraints.yaml"
-    TargetLts major minor -> do
-      when (minor > 0) $ do
-        verifyPreviousLtsMinorExists major minor
-      resolveFile' $ "lts-" <> show major <> "-build-constraints.yaml"
+  stackageConstraints <- case target of
+    TargetNightly _ -> nightlyConstraints
+    TargetLts major minor -> ltsConstraints major minor
+  logInfo "Writing constraints.yaml"
+  liftIO $ encodeFile constraintsFilename stackageConstraints
+
+nightlyConstraints = do
+  buildConstraintsPath <- resolveFile' "build-constraints.yaml"
   exists <- doesFileExist buildConstraintsPath
-  stackageConstraints <- if exists
+  if exists
     then do
       logInfo $ "Reusing already existing file " <> fromString (toFilePath buildConstraintsPath)
       loadStackageConstraints $ toFilePath buildConstraintsPath
     else do
       logInfo $ "Downloading " <> fromString (toFilePath buildConstraintsPath)
         <> " from commercialhaskell/stackage"
-      req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/stackage/master/"
-        <> toFilePath buildConstraintsPath
+      req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/stackage/master/build-constraints.yaml"
       man <- liftIO $ newManager tlsManagerSettings
       liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
-  logInfo "Writing constraints.yaml"
-  liftIO $ encodeFile constraintsFilename stackageConstraints
+
+ltsConstraints major minor = do
+  when (minor > 0) $ do
+    verifyPreviousLtsMinorExists major minor
+  let buildConstraintsName = "lts-" <> show major <> "-build-constraints.yaml"
+  buildConstraintsPath <- resolveFile' buildConstraintsName
+  exists <- doesFileExist buildConstraintsPath
+  logInfo $ "Downloading " <> fromString (buildConstraintsName) <> " from commercialhaskell/lts-haskell"
+  req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/lts-build-constraints/build-constraints/" <> buildConstraintsName
+  man <- liftIO $ newManager tlsManagerSettings
+  liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
 
 -- Performs a download of the previous LTS minor just to verify that it has been published.
 verifyPreviousLtsMinorExists :: Int -> Int -> RIO PantryApp ()
