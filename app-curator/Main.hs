@@ -182,7 +182,7 @@ verifyPreviousLtsMinorExists major minor = do
   exists <- doesFileExist constraintsPath
   when exists $
     removeFile constraintsPath
-  logInfo $ "Verifying existance of constraints.yaml from "
+  logInfo $ "Verifying existence of constraints.yaml from "
     <> "lts-" <> display major <> "." <> display prevMinor
   req <- parseUrlThrow url
   downloaded <- download req constraintsPath
