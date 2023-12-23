@@ -147,7 +147,7 @@ ltsConstraints major minor = do
   buildConstraintsPath <- resolveFile' buildConstraintsName
   exists <- doesFileExist buildConstraintsPath
   logInfo $ "Downloading " <> fromString (buildConstraintsName) <> " from commercialhaskell/lts-haskell"
-  req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/lts-build-constraints/build-constraints/" <> buildConstraintsName
+  req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/master/build-constraints/" <> buildConstraintsName
   man <- liftIO $ newManager tlsManagerSettings
   liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
 
