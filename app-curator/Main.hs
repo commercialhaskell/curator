@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -44,7 +45,7 @@ options =
       addCommand "constraints"
                  "Generate constraints file from build-constraints.yaml"
                  constraints
-                 parseTarget
+                 parseConstraintsArgs
       addCommand "snapshot-incomplete"
                  "Generate incomplete snapshot"
                  snapshotIncomplete
@@ -85,6 +86,10 @@ options =
                  "Bulk convert all new snapshots to the legacy LTS/Nightly directories"
                  legacyBulk
                  parseLegacyBulkArgs
+
+    parseConstraintsArgs = ConstraintsArgs
+      <$> flag True False (long "no-download" <> help "Download constraints file for LTS")
+      <*> parseTarget
     parseTarget =
       option (nightly <|> lts) ( long "target"
                               <> metavar "TARGET"
@@ -118,11 +123,16 @@ update :: RIO PantryApp ()
 update = do
   void $ updateHackageIndex $ Just "Updating hackage index"
 
-constraints :: Target -> RIO PantryApp ()
-constraints target = do
+data ConstraintsArgs = ConstraintsArgs
+  { downloadLtsConstraints :: Bool
+  , target :: Target
+  }
+
+constraints :: ConstraintsArgs -> RIO PantryApp ()
+constraints ConstraintsArgs { downloadLtsConstraints, target } = do
   stackageConstraints <- case target of
     TargetNightly _ -> nightlyConstraints
-    TargetLts major minor -> ltsConstraints major minor
+    TargetLts major minor -> ltsConstraints downloadLtsConstraints major minor
   logInfo "Writing constraints.yaml"
   liftIO $ encodeFile constraintsFilename stackageConstraints
 
@@ -140,16 +150,21 @@ nightlyConstraints = do
       man <- liftIO $ newManager tlsManagerSettings
       liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
 
-ltsConstraints major minor = do
+ltsConstraints download major minor = do
   when (minor > 0) $ do
     verifyPreviousLtsMinorExists major minor
   let buildConstraintsName = "lts-" <> show major <> "-build-constraints.yaml"
   buildConstraintsPath <- resolveFile' buildConstraintsName
   exists <- doesFileExist buildConstraintsPath
-  logInfo $ "Downloading " <> fromString (buildConstraintsName) <> " from commercialhaskell/lts-haskell"
-  req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/lts-build-constraints/build-constraints/" <> buildConstraintsName
-  man <- liftIO $ newManager tlsManagerSettings
-  liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
+  if download
+  then do
+    logInfo $ "Downloading " <> fromString (buildConstraintsName) <> " from commercialhaskell/lts-haskell"
+    req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/master/build-constraints/" <> buildConstraintsName
+    man <- liftIO $ newManager tlsManagerSettings
+    liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
+  else do
+      logInfo $ "Reusing local file " <> fromString (toFilePath buildConstraintsPath)
+      loadStackageConstraints $ toFilePath buildConstraintsPath
 
 -- Performs a download of the previous LTS minor just to verify that it has been published.
 verifyPreviousLtsMinorExists :: Int -> Int -> RIO PantryApp ()
@@ -167,7 +182,7 @@ verifyPreviousLtsMinorExists major minor = do
   exists <- doesFileExist constraintsPath
   when exists $
     removeFile constraintsPath
-  logInfo $ "Verifying existance of constraints.yaml from "
+  logInfo $ "Verifying existence of constraints.yaml from "
     <> "lts-" <> display major <> "." <> display prevMinor
   req <- parseUrlThrow url
   downloaded <- download req constraintsPath
