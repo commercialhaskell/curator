@@ -1,4 +1,6 @@
 resolver: lts-21.25
+nix:
+  packages: [ pkg-config libz ]
 
 # For local dev
 # - ../pantry
