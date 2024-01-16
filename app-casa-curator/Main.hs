@@ -444,7 +444,11 @@ downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
                threadDelay (1000 * 1000)
                attempt
              StatusCodeException r _
-               | getResponseStatusCode r == 403 -> logit e
+               -- FIXME: Ignoring 500s from Hackage because of
+               -- https://github.com/haskell/hackage-server/issues/1023
+               -- Also not sure about 403s. They seem suspicious. 410s seem
+               -- legit, though.
+               | getResponseStatusCode r `elem` [403, 410, 500] -> logit e
              _ -> throwM e)
 
 -- | Record that we've populated pantry with a snapshot.
