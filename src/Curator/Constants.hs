@@ -3,7 +3,6 @@ module Curator.Constants
     , constraintsFilename
     , snapshotsRepo
     , constraintsRepo
-    , haddockBucket
     ) where
 
 import RIO (Text, fromString)
@@ -19,6 +18,3 @@ snapshotsRepo = "commercialhaskell/stackage-snapshots"
 
 constraintsRepo :: String
 constraintsRepo = "commercialhaskell/stackage-constraints"
-
-haddockBucket :: Text
-haddockBucket = fromString "haddock.stackage.org"
