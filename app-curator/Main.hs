@@ -73,7 +73,7 @@ options =
       addCommand "upload-docs"
                  "Upload documentation to an S3 bucket"
                  uploadDocs'
-                 parseTarget
+                 parseUploadDocsArgs
       addCommand "upload-github"
                  "Commit and push snapshot definition to Github repository"
                  uploadGithub'
@@ -95,6 +95,14 @@ options =
                               <> metavar "TARGET"
                               <> help "Target Stackage snapshot 'lts-MM.NN' or 'nightly-YYYY-MM-DD'"
                                )
+    parseUploadDocsArgs = UploadArgs <$> parseTarget <*>
+        strOption (mconcat
+            [ long "bucket"
+            , metavar "BUCKET"
+            , value "haddock.stackage.org"
+            , showDefault
+            , help "Target bucket name. All other AWS params are taken from environment variables."
+            ])
     nightly = maybeReader $ \s -> do
       s' <- stripPrefix "nightly-" s
       TargetNightly <$> parseTimeM False defaultTimeLocale "%Y-%m-%d" s'
@@ -113,6 +121,8 @@ options =
       <$> strOption (long "stackage-snapshots" <> metavar "DIR")
       <*> strOption (long "lts-haskell" <> metavar "DIR")
       <*> strOption (long "stackage-nightly" <> metavar "DIR")
+
+data UploadArgs = UploadArgs Target Text
 
 main :: IO ()
 main = runPantryApp $ do
@@ -283,8 +293,8 @@ hackageDistro target = do
         Map.mapMaybe (snapshotVersion . spLocation) (snapshotPackages snapshot')
   uploadHackageDistro target packageVersions
 
-uploadDocs' :: Target -> RIO PantryApp ()
-uploadDocs' target = do
+uploadDocs' :: UploadArgs -> RIO PantryApp ()
+uploadDocs' (UploadArgs target bucket) = do
   docsDir <- fmap (T.unpack . T.dropSuffix "\n" . decodeUtf8Lenient . BL.toStrict) $
     withWorkingDir unpackDir $ proc "stack" (words "path --local-doc-root") readProcessStdout_
   logInfo "Uploading docs to S3"
@@ -295,7 +305,7 @@ uploadDocs' target = do
             in "nightly-" <> fromString date
           TargetLts x y ->
             "lts-" <> display x <> "." <> display y
-  uploadDocs docsDir prefix haddockBucket
+  uploadDocs docsDir prefix bucket
 
 uploadGithub' :: Target -> RIO PantryApp ()
 uploadGithub' target = do
