@@ -44,10 +44,15 @@ uploadDocs input' name bucket = do
 
     logInfo "Shelling out to AWS CLI to upload docs"
     proc
+      "time" -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
+      (
       "aws"
-      [ "s3"
+      : -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
+      [
+        "s3"
       , "cp"
-      , "--only-show-errors"
+      -- -- commented out to debug https://github.com/commercialhaskell/stackage-infrastructure/issues/4
+      --, "--only-show-errors"
       , "--recursive"
       , "--acl"
       , "public-read"
@@ -56,6 +61,7 @@ uploadDocs input' name bucket = do
       , input
       , T.unpack $ "s3://" <> bucket <> "/" <> name <> "/"
       ]
+      ) -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
       runProcess_
 
 -- | Create a TAR entry for each Hoogle txt file. Unfortunately doesn't stream.
