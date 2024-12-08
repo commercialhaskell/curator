@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.2.
+-- This file has been generated from package.yaml by hpack version 0.36.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -57,7 +57,7 @@ executable casa-curator
       TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
-      aeson
+      aeson <2.2
     , base >=4.10 && <5
     , bytestring
     , casa-client

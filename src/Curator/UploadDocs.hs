@@ -17,6 +17,8 @@ import qualified RIO.ByteString.Lazy as BL
 import RIO.Process
 import RIO.FilePath ((</>))
 
+import System.Environment.Blank (getEnvDefault)
+
 import qualified Codec.Archive.Tar             as Tar
 import qualified Codec.Archive.Tar.Entry       as Tar
 
@@ -42,26 +44,26 @@ uploadDocs input' name bucket = do
     D.createDirectoryIfMissing True $ input </> "hoogle"
     BL.writeFile (input </> "hoogle" </> "orig.tar") hooglesLBS
 
+    -- maybe default to --quiet or "--only-show-errors"?
+    curator_AWS_OPTS <- liftIO $ fmap words $
+                        getEnvDefault "CURATOR_AWS_OPTIONS" ""
     logInfo "Shelling out to AWS CLI to upload docs"
     proc
       "time" -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
-      (
-      "aws"
-      : -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
-      [
-        "s3"
-      , "cp"
-      -- -- commented out to debug https://github.com/commercialhaskell/stackage-infrastructure/issues/4
-      --, "--only-show-errors"
-      , "--recursive"
-      , "--acl"
-      , "public-read"
-      , "--cache-control"
-      , "maxage=31536000"
-      , input
-      , T.unpack $ "s3://" <> bucket <> "/" <> name <> "/"
-      ]
-      ) -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
+      ( [ "aws"
+        , "s3"
+        , "cp"]
+        ++
+        curator_AWS_OPTS
+        ++
+        [ "--recursive"
+        , "--acl"
+        , "public-read"
+        , "--cache-control"
+        , "maxage=31536000"
+        , input
+        , T.unpack $ "s3://" <> bucket <> "/" <> name <> "/"
+        ] )
       runProcess_
 
 -- | Create a TAR entry for each Hoogle txt file. Unfortunately doesn't stream.
