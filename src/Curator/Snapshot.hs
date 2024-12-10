@@ -169,8 +169,7 @@ checkDependencyGraph constraints snapshot = do
                 | (pn, sp) <- Map.toList (Pantry.snapshotPackages snapshot)
                 ]
     ghcBootPackages0 <- liftIO $ getBootPackages compilerVer
-    let ghcBootPackages = prunedBootPackages ghcBootPackages0 (Map.keysSet snapshotPackages)
-        declared = snapshotPackages <> Map.map (Just . bpVersion) ghcBootPackages
+    let declared = snapshotPackages <> Map.map (Just . bpVersion) ghcBootPackages0
         cabalName = "Cabal"
         cabalError err = pure . Map.singleton cabalName $ [OtherError err]
     pkgErrors <- case Map.lookup cabalName declared of
@@ -193,7 +192,7 @@ checkDependencyGraph constraints snapshot = do
                       packages
           let depTree =
                 Map.map (piVersion &&& piTreeDeps) pkgInfos
-                <> Map.map ((, []) . Just . bpVersion) ghcBootPackages
+                <> Map.map ((, []) . Just . bpVersion) ghcBootPackages0
           return $ Map.mapWithKey (validatePackage constraints depTree cabalVersion) pkgInfos
     let (rangeErrors, otherErrors) = splitErrors pkgErrors
         rangeErrors' =
@@ -548,19 +547,6 @@ getBootPackages ghcVersion = do
           let PackageIdentifier name version = sourcePackageId ipi
           in (name, BootPackage name version (installedUnitId ipi) (depends ipi))
     Map.fromList . map toBootPackage <$> dump (hcPkgInfo db) silent GlobalPackageDB
-
-prunedBootPackages ::
-       Map PackageName BootPackage
-    -> Set PackageName
-    -> Map PackageName BootPackage
-prunedBootPackages ghcBootPackages0 overrides =
-    snd $
-    partitionReplacedDependencies
-        ghcBootPackages0
-        bpName
-        bpId
-        bpDepends
-        overrides
 
 -- | GHC wired-in packages, list taken from Stack.Constants
 -- see also ghc\/compiler\/basicTypes\/Module.hs
