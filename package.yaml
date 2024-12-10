@@ -56,8 +56,8 @@ executables:
       - text
       - optparse-simple
       - containers
-      # aeson 2.2 needs attoparsec-aeson
-      - aeson < 2.2
+      - aeson
+      - attoparsec-aeson
       - http-conduit
       - syb
       - persistent-sqlite
