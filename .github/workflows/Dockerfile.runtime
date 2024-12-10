@@ -1,10 +1,10 @@
-FROM ghcr.io/commercialhaskell/curator/base-build:commit-9e621eb31fddbd9590d9c8b84ed09c68c1cce337 as build-app
+FROM ghcr.io/commercialhaskell/curator/base-build:5c2e4a5e5ef34ed0253b3c8d64bfef77ba79c433 as build-app
 
 RUN mkdir -p /artifacts/bin
 COPY . /src
 RUN stack install --stack-yaml /src/stack.yaml --local-bin-path /artifacts/bin
 
-FROM ghcr.io/commercialhaskell/curator/base-run:commit-9e621eb31fddbd9590d9c8b84ed09c68c1cce337
+FROM ghcr.io/commercialhaskell/curator/base-run:5c2e4a5e5ef34ed0253b3c8d64bfef77ba79c433
 
 RUN mkdir -p /app/db
 COPY --from=build-app /artifacts/bin/casa-curator /usr/local/bin/casa-curator
