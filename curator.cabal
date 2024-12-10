@@ -57,7 +57,8 @@ executable casa-curator
       TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -threaded
   build-depends:
-      aeson <2.2
+      aeson
+    , attoparsec-aeson
     , base >=4.10 && <5
     , bytestring
     , casa-client

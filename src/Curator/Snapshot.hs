@@ -168,9 +168,8 @@ checkDependencyGraph constraints snapshot = do
                 [ (pn, snapshotVersion (spLocation sp))
                 | (pn, sp) <- Map.toList (Pantry.snapshotPackages snapshot)
                 ]
-    ghcBootPackages0 <- liftIO $ getBootPackages compilerVer
-    let ghcBootPackages = prunedBootPackages ghcBootPackages0 (Map.keysSet snapshotPackages)
-        declared = snapshotPackages <> Map.map (Just . bpVersion) ghcBootPackages
+    ghcBootPackages <- liftIO $ getBootPackages compilerVer
+    let declared = snapshotPackages <> Map.map (Just . bpVersion) ghcBootPackages
         cabalName = "Cabal"
         cabalError err = pure . Map.singleton cabalName $ [OtherError err]
     pkgErrors <- case Map.lookup cabalName declared of
@@ -197,7 +196,7 @@ checkDependencyGraph constraints snapshot = do
           return $ Map.mapWithKey (validatePackage constraints depTree cabalVersion) pkgInfos
     let (rangeErrors, otherErrors) = splitErrors pkgErrors
         rangeErrors' =
-          Map.mapWithKey (\(pname, _, _) bs -> (Map.member pname ghcBootPackages0, bs)) rangeErrors
+          Map.mapWithKey (\(pname, _, _) bs -> (Map.member pname ghcBootPackages, bs)) rangeErrors
     unless (Map.null rangeErrors && Map.null otherErrors) $
       throwM (BrokenDependencyGraph rangeErrors' otherErrors)
 
@@ -548,19 +547,6 @@ getBootPackages ghcVersion = do
           let PackageIdentifier name version = sourcePackageId ipi
           in (name, BootPackage name version (installedUnitId ipi) (depends ipi))
     Map.fromList . map toBootPackage <$> dump (hcPkgInfo db) silent GlobalPackageDB
-
-prunedBootPackages ::
-       Map PackageName BootPackage
-    -> Set PackageName
-    -> Map PackageName BootPackage
-prunedBootPackages ghcBootPackages0 overrides =
-    snd $
-    partitionReplacedDependencies
-        ghcBootPackages0
-        bpName
-        bpId
-        bpDepends
-        overrides
 
 -- | GHC wired-in packages, list taken from Stack.Constants
 -- see also ghc\/compiler\/basicTypes\/Module.hs
