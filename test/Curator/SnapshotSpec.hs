@@ -21,8 +21,7 @@ spec = do
         let dependingPackage = DependingPackage{
           dpName = pkg,
           dpVersion = version,
-          dpMaintainers = maintainers,
-          dpGithubPings = S.fromList ["jsl", "fl", "fm"]
+          dpMaintainers = maintainers
         }
         let depBounds = DepBounds{
           dbRange = noVersion,
@@ -32,4 +31,4 @@ spec = do
         let users = M.fromList [(dependingPackage, depBounds)]
 
         unpack (pkgBoundsError pkg maintainers version isBoot users)
-          `shouldContain` "@fl @fm @jsl"
+          `shouldContain` "fl, fm, jsl"
