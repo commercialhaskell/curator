@@ -31,8 +31,9 @@ import Distribution.System (Arch(..), OS(..))
 import qualified Distribution.Text as DT
 import qualified Distribution.Pretty
 import qualified Distribution.Types.CondTree as C
-import Distribution.Types.Dependency (depPkgName, depVerRange, Dependency(..))
+import Distribution.Types.Dependency (depLibraries, depPkgName, depVerRange, Dependency(..))
 import Distribution.Types.ExeDependency (ExeDependency(..))
+import Distribution.Types.LibraryName (libraryNameString)
 import Distribution.Types.UnitId
 import Distribution.Types.UnqualComponentName (unqualComponentNameToPackageName)
 #if MIN_VERSION_Cabal(3,4,0)
@@ -416,10 +417,9 @@ getPkgInfo constraints compilerVer pname sp = do
                        ]
         collectDeps tree getBI =
           let deps0 = collectDeps0 tree getBI
-              partitionSublibs = partition (\d -> Map.member (depPkgName d) sublibraries)
+              partitionSublibs = partition (\d -> not . null $ mapMaybe libraryNameString (toList $ depLibraries d))
               (sublibs, otherDeps) = partitionSublibs deps0
-              (_intraDeps, sublibDeps) = partitionSublibs . Map.foldr (<>) mempty $
-                Map.restrictKeys sublibraries (Set.fromList $ map depPkgName sublibs)
+              sublibDeps = join $ mapMaybe (flip Map.lookup sublibraries . unqualComponentNameToPackageName) (mapMaybe libraryNameString ((toList . depLibraries) =<< sublibs))
           in sublibDeps <> otherDeps
         toCheck skip comp getBI condTree = (skip, comp, collectDeps condTree getBI)
         checks =
