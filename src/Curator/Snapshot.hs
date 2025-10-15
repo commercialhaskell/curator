@@ -417,9 +417,10 @@ getPkgInfo constraints compilerVer pname sp = do
                        ]
         collectDeps tree getBI =
           let deps0 = collectDeps0 tree getBI
-              partitionSublibs = partition (\d -> not . null $ mapMaybe libraryNameString (toList $ depLibraries d))
-              (sublibs, otherDeps) = partitionSublibs deps0
-              sublibDeps = join $ mapMaybe (flip Map.lookup sublibraries . unqualComponentNameToPackageName) (mapMaybe libraryNameString ((toList . depLibraries) =<< sublibs))
+              (sublibs, otherDeps) = partition (any (isJust . libraryNameString) . toList . depLibraries) deps0
+              sublibNames = concatMap (mapMaybe libraryNameString . toList . depLibraries) sublibs
+              sublibPkgNames = map unqualComponentNameToPackageName sublibNames
+              sublibDeps = join $ mapMaybe (`Map.lookup` sublibraries) sublibPkgNames
           in sublibDeps <> otherDeps
         toCheck skip comp getBI condTree = (skip, comp, collectDeps condTree getBI)
         checks =
