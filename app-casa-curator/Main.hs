@@ -595,7 +595,7 @@ downloadAllSnapshotTextNames = go (1 :: Int) mempty
   where
     go page acc = do
       request <-
-        parseRequest ("https://www.stackage.org/snapshots?page=" ++ show page)
+        parseRequest ("https://www.stackage.org/api/v1/snapshots?page=" ++ show page)
       response :: Response Aeson.Value <-
         let attempt =
               catch
