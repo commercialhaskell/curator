@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -24,6 +25,7 @@ import qualified RIO.Map as Map
 import RIO.Process
 import qualified RIO.Text as T
 import RIO.Time
+import System.IO (hPutStrLn)
 
 options :: IO ((), RIO PantryApp ())
 options =
@@ -125,9 +127,11 @@ options =
 data UploadArgs = UploadArgs Target Text
 
 main :: IO ()
-main = runPantryApp $ do
+main = (runPantryApp $ do
   ((), runCmd) <- liftIO options
-  runCmd
+  runCmd) `catch` \(e :: SomeException) -> do
+    liftIO $ hPutStrLn stderr $ "curator: " <> show e
+    exitFailure
 
 update :: RIO PantryApp ()
 update = do
