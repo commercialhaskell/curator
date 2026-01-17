@@ -542,7 +542,7 @@ getBootPackages ghcVersion = do
     db <- configureAllKnownPrograms silent defaultProgramDb
     rslt <- lookupProgramVersion silent ghcProgram (thisVersion ghcVersion) db
     case rslt of
-      Left err -> error $ "Can't get proper GHC version: " ++ err
+      Left err -> error $ "Can't get proper GHC version: " ++ show err
       Right _ -> return ()
     let toBootPackage ipi =
           let PackageIdentifier name version = sourcePackageId ipi

@@ -1,8 +1,4 @@
-resolver: lts-22.43
-extra-deps:
-# lts-23.24 provides persistent-2.14.6.3
-# Needed to be able to parse: fromPersistValue (toPersistValue "2025-06-04T06:42:25.6920213Z") :: Either Text UTCTime
-- persistent-2.17.0.0@rev:0
+resolver: lts-24.11
 nix:
   packages: [ pkg-config libz ]
 
