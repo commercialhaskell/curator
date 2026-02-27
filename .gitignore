@@ -2,3 +2,4 @@
 *~
 *.swp
 stack.yaml.lock # Waiting for Stack 2.3
+.dev-profile

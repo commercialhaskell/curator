@@ -18,11 +18,11 @@ gen () {
     fi
 }
 
-cd "$(dirname "$0")/../.."
+cd "$(pwd)"
 
 cd nix/packages
 
-gen curator ../../.
+gen curator ../..
 
 # Need the latest Cabal file format to support all packages on Hackage
 gen Cabal cabal://Cabal-3.16.1.0
