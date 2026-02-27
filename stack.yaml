@@ -11,7 +11,7 @@ extra-deps:
   - Cabal-syntax-3.16.1.0
 
 nix:
-  packages: [ pkg-config libz ]
+  shell-file: shell-stack.nix
 
 # For local dev
 # - ../pantry
