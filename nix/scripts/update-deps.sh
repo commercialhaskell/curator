@@ -32,6 +32,11 @@ retry() {
     return 1
 }
 
+# Temp files for parallel job results
+lts_result=$(mktemp)
+cabal_result=$(mktemp)
+trap 'rm -f "$lts_result" "$cabal_result"' EXIT
+
 #
 # Step 1: Update flake inputs
 #
@@ -39,115 +44,125 @@ echo "=== Updating flake inputs ==="
 nix flake update
 
 #
-# Step 2: Sync LTS version with nixpkgs
+# Step 2: Fetch LTS and Cabal info in parallel
 #
 echo ""
-echo "=== Syncing LTS version ==="
+echo "=== Fetching LTS and Cabal versions (parallel) ==="
 
-nixpkgs_rev=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
-nixpkgs_date=$(jq -r '.nodes.nixpkgs.locked.lastModified' flake.lock)
-nixpkgs_date_iso=$(date -d "@$nixpkgs_date" -u +%Y-%m-%dT%H:%M:%SZ)
+# Background job: Get LTS version from GitHub
+(
+    nixpkgs_date=$(jq -r '.nodes.nixpkgs.locked.lastModified' flake.lock)
+    nixpkgs_date_iso=$(date -d "@$nixpkgs_date" -u +%Y-%m-%dT%H:%M:%SZ)
 
-echo "nixpkgs rev: $nixpkgs_rev"
-echo "nixpkgs date: $nixpkgs_date_iso"
+    search_result=$(retry gh api "search/commits" \
+        -X GET \
+        -f q="repo:NixOS/nixpkgs haskellPackages stackage LTS committer-date:<=$nixpkgs_date_iso" \
+        -f sort="committer-date" \
+        -f order="desc" \
+        -f per_page=1 \
+        --jq '.items[0].commit.message')
 
-echo "Searching for LTS version in nixpkgs history..."
+    if [[ -z "$search_result" || "$search_result" == "null" ]]; then
+        echo "Error: Could not find LTS commit" >&2
+        exit 1
+    fi
 
-search_result=$(retry gh api "search/commits" \
-    -X GET \
-    -f q="repo:NixOS/nixpkgs haskellPackages stackage LTS committer-date:<=$nixpkgs_date_iso" \
-    -f sort="committer-date" \
-    -f order="desc" \
-    -f per_page=1 \
-    --jq '.items[0].commit.message')
+    lts_version=$(echo "$search_result" | grep -oP 'LTS \K[0-9]+\.[0-9]+' | tail -1)
+    if [[ -z "$lts_version" ]]; then
+        echo "Error: Could not parse LTS version" >&2
+        exit 1
+    fi
 
-if [[ -z "$search_result" || "$search_result" == "null" ]]; then
-    echo "Error: Could not find LTS commit via search" >&2
-    exit 1
-fi
+    echo "$lts_version"
+) > "$lts_result" &
+lts_pid=$!
 
-echo "Found commit: $search_result"
+# Background job: Get latest Cabal versions from Hackage
+(
+    cabal_ver=$(retry curl -sH "Accept: application/json" \
+        "https://hackage.haskell.org/package/Cabal/preferred" | jq -r '.["normal-version"][0]')
+    cabal_syntax_ver=$(retry curl -sH "Accept: application/json" \
+        "https://hackage.haskell.org/package/Cabal-syntax/preferred" | jq -r '.["normal-version"][0]')
+    echo "$cabal_ver $cabal_syntax_ver"
+) > "$cabal_result" &
+cabal_pid=$!
 
-lts_version=$(echo "$search_result" | grep -oP 'LTS \K[0-9]+\.[0-9]+' | tail -1)
+# Wait for both
+wait "$lts_pid" || { echo "LTS fetch failed"; exit 1; }
+wait "$cabal_pid" || { echo "Cabal fetch failed"; exit 1; }
 
-if [[ -z "$lts_version" ]]; then
-    echo "Error: Could not parse LTS version from commit message" >&2
-    exit 1
-fi
+lts_version=$(cat "$lts_result")
+read -r cabal_latest cabal_syntax_latest < "$cabal_result"
 
 echo "LTS version: $lts_version"
-
-current_snapshot=$(grep -oP '^snapshot: lts-\K[0-9]+\.[0-9]+' stack.yaml || echo "")
-
-if [[ "$current_snapshot" == "$lts_version" ]]; then
-    echo "stack.yaml already uses lts-$lts_version"
-else
-    echo "Updating stack.yaml: lts-$current_snapshot -> lts-$lts_version"
-    sed -i "s/^snapshot: lts-.*/snapshot: lts-$lts_version/" stack.yaml
-fi
+echo "Cabal: $cabal_latest, Cabal-syntax: $cabal_syntax_latest"
 
 #
-# Step 3: Check for new Cabal versions
+# Step 3: Update stack.yaml
 #
 echo ""
-echo "=== Checking for new Cabal ==="
+echo "=== Updating stack.yaml ==="
 
-get_latest_version() {
-    local pkg="$1"
-    retry curl -sH "Accept: application/json" "https://hackage.haskell.org/package/$pkg/preferred" | jq -r '.["normal-version"][0]'
-}
+current_snapshot=$(grep -oP '^snapshot: lts-\K[0-9]+\.[0-9]+' stack.yaml || echo "")
+if [[ "$current_snapshot" != "$lts_version" ]]; then
+    echo "Updating snapshot: lts-$current_snapshot -> lts-$lts_version"
+    sed -i "s/^snapshot: lts-.*/snapshot: lts-$lts_version/" stack.yaml
+else
+    echo "Snapshot already at lts-$lts_version"
+fi
 
-get_current_version() {
-    local pkg="$1"
-    grep -oP "^  - ${pkg}-\\K[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" stack.yaml || echo ""
-}
-
-cabal_latest=$(get_latest_version "Cabal")
-cabal_syntax_latest=$(get_latest_version "Cabal-syntax")
-
-echo "Latest on Hackage: Cabal $cabal_latest, Cabal-syntax $cabal_syntax_latest"
-
-cabal_current=$(get_current_version "Cabal")
-cabal_syntax_current=$(get_current_version "Cabal-syntax")
-
-echo "Current in stack.yaml: Cabal $cabal_current, Cabal-syntax $cabal_syntax_current"
-
+cabal_current=$(grep -oP "^  - Cabal-\\K[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" stack.yaml || echo "")
 if [[ "$cabal_current" != "$cabal_latest" ]]; then
     echo "Updating Cabal: $cabal_current -> $cabal_latest"
     sed -i "s/- Cabal-${cabal_current}/- Cabal-${cabal_latest}/" stack.yaml
 else
-    echo "Cabal already up to date"
+    echo "Cabal already at $cabal_latest"
 fi
 
+cabal_syntax_current=$(grep -oP "^  - Cabal-syntax-\\K[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" stack.yaml || echo "")
 if [[ "$cabal_syntax_current" != "$cabal_syntax_latest" ]]; then
     echo "Updating Cabal-syntax: $cabal_syntax_current -> $cabal_syntax_latest"
     sed -i "s/- Cabal-syntax-${cabal_syntax_current}/- Cabal-syntax-${cabal_syntax_latest}/" stack.yaml
 else
-    echo "Cabal-syntax already up to date"
+    echo "Cabal-syntax already at $cabal_syntax_latest"
 fi
 
 #
-# Step 4: Regenerate nix package definitions
+# Step 4: Regenerate nix packages (parallel)
 #
 echo ""
-echo "=== Regenerating nix packages ==="
+echo "=== Regenerating nix packages (parallel) ==="
 
 cd nix/packages
 
-echo "Generating curator..."
-echo "# Generated by update-deps" > curator.nix.tmp
-retry cabal2nix ../.. >> curator.nix.tmp
-mv curator.nix.tmp curator.nix
+# All three cabal2nix calls in parallel
+(
+    echo "# Generated by update-deps" > curator.nix.tmp
+    retry cabal2nix ../.. >> curator.nix.tmp
+    mv curator.nix.tmp curator.nix
+    echo "  curator: done"
+) &
+curator_pid=$!
 
-echo "Generating Cabal..."
-echo "# Generated by update-deps" > Cabal.nix.tmp
-retry cabal2nix "cabal://Cabal-${cabal_latest}" >> Cabal.nix.tmp
-mv Cabal.nix.tmp Cabal.nix
+(
+    echo "# Generated by update-deps" > Cabal.nix.tmp
+    retry cabal2nix "cabal://Cabal-${cabal_latest}" >> Cabal.nix.tmp
+    mv Cabal.nix.tmp Cabal.nix
+    echo "  Cabal: done"
+) &
+cabal_nix_pid=$!
 
-echo "Generating Cabal-syntax..."
-echo "# Generated by update-deps" > Cabal-syntax.nix.tmp
-retry cabal2nix "cabal://Cabal-syntax-${cabal_syntax_latest}" >> Cabal-syntax.nix.tmp
-mv Cabal-syntax.nix.tmp Cabal-syntax.nix
+(
+    echo "# Generated by update-deps" > Cabal-syntax.nix.tmp
+    retry cabal2nix "cabal://Cabal-syntax-${cabal_syntax_latest}" >> Cabal-syntax.nix.tmp
+    mv Cabal-syntax.nix.tmp Cabal-syntax.nix
+    echo "  Cabal-syntax: done"
+) &
+cabal_syntax_nix_pid=$!
+
+wait "$curator_pid" || { echo "curator cabal2nix failed"; exit 1; }
+wait "$cabal_nix_pid" || { echo "Cabal cabal2nix failed"; exit 1; }
+wait "$cabal_syntax_nix_pid" || { echo "Cabal-syntax cabal2nix failed"; exit 1; }
 
 cd ../..
 
