@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Sync stack.yaml resolver with the LTS version used by nixpkgs.
+# Sync stack.yaml snapshot with the LTS version used by nixpkgs.
 #
 # Usage: nix run .#sync-lts
 #
@@ -10,6 +10,28 @@
 # 3. Updates stack.yaml with the matching LTS version
 
 set -Eeuo pipefail
+
+# Retry a command with exponential backoff
+retry() {
+    local max_attempts=3
+    local delay=2
+    local attempt=1
+    local output
+
+    while (( attempt <= max_attempts )); do
+        if output=$("$@" 2>&1); then
+            echo "$output"
+            return 0
+        fi
+        echo "Attempt $attempt/$max_attempts failed, retrying in ${delay}s..." >&2
+        sleep "$delay"
+        (( attempt++ ))
+        (( delay *= 2 ))
+    done
+
+    echo "All $max_attempts attempts failed" >&2
+    return 1
+}
 
 # Extract nixpkgs rev from flake.lock
 nixpkgs_rev=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
@@ -24,13 +46,13 @@ echo "nixpkgs date: $nixpkgs_date_iso"
 # We search for commits before the pinned date
 echo "Searching for LTS version in nixpkgs history..."
 
-search_result=$(gh api "search/commits" \
+search_result=$(retry gh api "search/commits" \
     -X GET \
     -f q="repo:NixOS/nixpkgs haskellPackages stackage LTS committer-date:<=$nixpkgs_date_iso" \
     -f sort="committer-date" \
     -f order="desc" \
     -f per_page=1 \
-    --jq '.items[0].commit.message' 2>&1)
+    --jq '.items[0].commit.message')
 
 if [[ -z "$search_result" || "$search_result" == "null" ]]; then
     echo "Error: Could not find LTS commit via search" >&2
