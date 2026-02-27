@@ -56,6 +56,18 @@
       ];
     };
 
+    packages.x86_64-linux.update-cabal = pkgs.writeShellApplication {
+      name = "update-cabal";
+      text = builtins.readFile ./nix/scripts/update-cabal.sh;
+      runtimeInputs = [
+        pkgs.curl
+        pkgs.jq
+        pkgs.gnused
+        pkgs.gnugrep
+        pkgs.cabal2nix
+      ];
+    };
+
     devShells.x86_64-linux.stack = pkgs.mkShell {
       nativeBuildInputs = [
         pkgs.haskellPackages.ghc

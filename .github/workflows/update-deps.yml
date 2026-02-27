@@ -48,6 +48,7 @@ jobs:
             Automated dependency update:
             - Updated nixpkgs flake input
             - Synced stack.yaml snapshot with nixpkgs LTS version
+            - Updated Cabal/Cabal-syntax to latest from Hackage
             - Regenerated nix package definitions
           branch: auto-update-deps
           delete-branch: true
