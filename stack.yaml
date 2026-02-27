@@ -1,4 +1,15 @@
-resolver: lts-24.11
+snapshot: lts-24.29
+
+# pantry has Cabal <3.15 bound but we need 3.16 for casa-curator
+allow-newer: true
+allow-newer-deps:
+  - pantry
+
+extra-deps:
+  # Needed for casa-curator, which pulls bleeding edge packages from Hackage.
+  - Cabal-3.16.1.0
+  - Cabal-syntax-3.16.1.0
+
 nix:
   packages: [ pkg-config libz ]
 
