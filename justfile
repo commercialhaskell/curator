@@ -1,25 +1,6 @@
 # Update all dependencies: nixpkgs, LTS snapshot, Cabal, and nix package definitions
 update-deps:
-    nix flake update
-    nix run .#sync-lts
-    nix run .#update-cabal
-    nix run .#gen-packages
-
-# Check for new Cabal versions on Hackage
-update-cabal:
-    nix run .#update-cabal
-
-# Update just the nixpkgs flake input
-update-nixpkgs:
-    nix flake update
-
-# Sync stack.yaml snapshot with nixpkgs LTS version
-sync-lts:
-    nix run .#sync-lts
-
-# Regenerate nix package definitions from cabal files
-gen-packages:
-    nix run .#gen-packages
+    nix run .#update-deps
 
 # Build with nix
 build:

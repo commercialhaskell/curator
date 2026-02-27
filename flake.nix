@@ -35,36 +35,18 @@
     packages.x86_64-linux.default = self.packages.x86_64-linux.curator;
     packages.x86_64-linux.curator = pkgs.myHaskellPackages.curator;
 
-    packages.x86_64-linux.gen-packages = pkgs.writeShellApplication {
-      name = "gen-packages";
-      text = builtins.readFile ./nix/scripts/gen-packages.sh;
-      runtimeInputs = [
-        pkgs.cabal-install
-        pkgs.cabal2nix
-      ];
-    };
-
-    packages.x86_64-linux.sync-lts = pkgs.writeShellApplication {
-      name = "sync-lts";
-      text = builtins.readFile ./nix/scripts/sync-lts.sh;
+    packages.x86_64-linux.update-deps = pkgs.writeShellApplication {
+      name = "update-deps";
+      text = builtins.readFile ./nix/scripts/update-deps.sh;
       runtimeInputs = [
         pkgs.coreutils
+        pkgs.curl
         pkgs.jq
         pkgs.gh
         pkgs.gnused
         pkgs.gnugrep
-      ];
-    };
-
-    packages.x86_64-linux.update-cabal = pkgs.writeShellApplication {
-      name = "update-cabal";
-      text = builtins.readFile ./nix/scripts/update-cabal.sh;
-      runtimeInputs = [
-        pkgs.curl
-        pkgs.jq
-        pkgs.gnused
-        pkgs.gnugrep
         pkgs.cabal2nix
+        pkgs.nix
       ];
     };
 
