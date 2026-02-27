@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# cancel previous jobs on the branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: stackage-infrastructure
+
+      - name: Build
+        run: nix build
+
+      - name: Build shells
+        if: github.event_name == 'push'
+        run: |
+          nix build .#devShells.x86_64-linux.default --out-link result-shell-default
+          nix build .#devShells.x86_64-linux.stack --out-link result-shell-stack
+
+  stack-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: stackage-infrastructure
+
+      - name: Cache Stack dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.stack
+          key: stack-deps-${{ runner.os }}-${{ hashFiles('stack.yaml', 'stack.yaml.lock', 'package.yaml') }}
+          restore-keys: |
+            stack-deps-${{ runner.os }}-
+
+      - name: Test
+        run: stack --nix-pure test --fast --no-interleaved-output
+
+  cabal-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: stackage-infrastructure
+
+      - name: Test
+        run: nix develop -c cabal test -O0
