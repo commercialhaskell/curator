@@ -33,7 +33,7 @@
       };
 
     packages.x86_64-linux.default = self.packages.x86_64-linux.curator;
-    packages.x86_64-linux.curator = pkgs.myHaskellPackages.curator;
+    packages.x86_64-linux.curator = pkgs.haskell.lib.justStaticExecutables pkgs.myHaskellPackages.curator;
 
     packages.x86_64-linux.update-deps = pkgs.writeShellApplication {
       name = "update-deps";
