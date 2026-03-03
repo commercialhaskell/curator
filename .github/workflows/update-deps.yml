@@ -1,0 +1,54 @@
+name: Update Dependencies
+
+on:
+  schedule:
+    # Run weekly on Monday at 9:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Run update-deps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: just update-deps
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update dependencies"
+          title: "Update dependencies"
+          body: |
+            Automated dependency update:
+            - Updated nixpkgs flake input
+            - Synced stack.yaml snapshot with nixpkgs LTS version
+            - Updated Cabal/Cabal-syntax to latest from Hackage
+            - Regenerated nix package definitions
+          branch: auto-update-deps
+          delete-branch: true

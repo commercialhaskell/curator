@@ -21,7 +21,7 @@ import Distribution.Pretty as C (Pretty(..))
 import Distribution.Compiler (CompilerFlavor(..))
 import Distribution.InstalledPackageInfo (InstalledPackageInfo(..))
 import qualified Distribution.PackageDescription as C
-import Distribution.Simple.Compiler (PackageDB(GlobalPackageDB))
+import Distribution.Simple.Compiler (PackageDBX(GlobalPackageDB))
 import Distribution.Simple.GHC (hcPkgInfo)
 import Distribution.Simple.Program.Builtin (ghcProgram)
 import Distribution.Simple.Program.Db
@@ -547,7 +547,7 @@ getBootPackages ghcVersion = do
     let toBootPackage ipi =
           let PackageIdentifier name version = sourcePackageId ipi
           in (name, BootPackage name version (installedUnitId ipi) (depends ipi))
-    Map.fromList . map toBootPackage <$> dump (hcPkgInfo db) silent GlobalPackageDB
+    Map.fromList . map toBootPackage <$> dump (hcPkgInfo db) silent Nothing GlobalPackageDB
 
 -- | GHC wired-in packages, list taken from Stack.Constants
 -- see also ghc\/compiler\/basicTypes\/Module.hs
