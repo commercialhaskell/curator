@@ -5,6 +5,11 @@ on:
     # Run weekly on Monday at 9:00 UTC
     - cron: '0 9 * * 1'
   workflow_dispatch: # Allow manual triggering
+  # Run automatically on PRs that modify the workflow itself.
+  pull_request:
+    paths:
+      - '.github/workflows/update-deps.yml'
+      - 'nix/scripts/update-deps.sh'
 
 permissions:
   contents: write
@@ -38,7 +43,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        if: steps.changes.outputs.has_changes == 'true'
+        if: steps.changes.outputs.has_changes == 'true' && github.event_name != 'pull_request'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

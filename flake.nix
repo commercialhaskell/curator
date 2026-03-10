@@ -47,6 +47,7 @@
         pkgs.gnugrep
         pkgs.cabal2nix
         pkgs.nix
+        pkgs.cabal-install
       ];
     };
 
