@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
@@ -276,18 +277,18 @@ unpackFiles = do
 build :: Int -> RIO PantryApp ()
 build jobs = do
   logInfo "Building"
-  withWorkingDir unpackDir $ proc
-    "stack"
-    ["--terminal",
-     "build",
-     "--test", "--test-suite-timeout=600", "--no-rerun-tests",
-     "--bench", "--no-run-benchmarks",
-     "--haddock",
-     "--no-interleaved-output",
-     "--ghc-options", "-w",
-     "--jobs=" ++ show jobs
-    ]
-    runProcess_
+  withWorkingDir unpackDir $
+    runWithEscalatingKill (6 * 3600) 120 $
+      proc "stack"
+        [ "--terminal"
+        , "build"
+        , "--test", "--test-suite-timeout=600", "--no-rerun-tests"
+        , "--bench", "--no-run-benchmarks"
+        , "--haddock"
+        , "--no-interleaved-output"
+        , "--ghc-options", "-w"
+        , "--jobs=" ++ show jobs
+        ]
 
 hackageDistro :: Target -> RIO PantryApp ()
 hackageDistro target = do

@@ -22,13 +22,16 @@ library:
   source-dirs: src
   exposed-modules:
   - Curator
+  - Curator.Process
   - Curator.Snapshot
   dependencies:
   - Cabal
   - aeson
   - bytestring
   - conduit
+  - process
   - tar
+  - unix
 
 executables:
   curator:

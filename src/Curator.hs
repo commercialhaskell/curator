@@ -4,6 +4,7 @@ module Curator
   ) where
 
 import Curator.Constants as Export
+import Curator.Process as Export
 import Curator.HackageDistro as Export
 import Curator.Legacy as Export
 import Curator.Repo as Export
