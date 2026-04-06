@@ -4,8 +4,8 @@
 , http-client-tls, http-conduit, http-download, lens, lib
 , monad-logger, optparse-applicative, optparse-simple, pantry, path
 , path-io, persistent, persistent-sqlite, persistent-template
-, resourcet, rio, rio-orphans, rio-prettyprint, syb, tar, text
-, time, yaml
+, process, resourcet, rio, rio-orphans, rio-prettyprint, syb, tar
+, text, time, unix, yaml
 }:
 mkDerivation {
   pname = "curator";
@@ -15,7 +15,7 @@ mkDerivation {
   isExecutable = true;
   libraryHaskellDepends = [
     aeson base bytestring Cabal conduit http-client http-client-tls
-    pantry path path-io rio rio-prettyprint tar yaml
+    pantry path path-io process rio rio-prettyprint tar unix yaml
   ];
   executableHaskellDepends = [
     aeson attoparsec-aeson base bytestring casa-client conduit
