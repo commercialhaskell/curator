@@ -8,6 +8,8 @@ dependencies:
 - base >=4.10 && < 5
 - http-client
 - http-client-tls
+- http-conduit
+- http-types
 - pantry
 - path
 - path-io

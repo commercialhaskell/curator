@@ -39,6 +39,8 @@ library
     , conduit
     , http-client
     , http-client-tls
+    , http-conduit
+    , http-types
     , pantry
     , path
     , path-io
