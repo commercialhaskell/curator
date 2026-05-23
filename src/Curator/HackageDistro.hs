@@ -8,6 +8,8 @@ import Data.ByteString.Builder (toLazyByteString)
 import Distribution.Types.PackageName
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
+import Network.HTTP.Simple (addRequestHeader)
+import Network.HTTP.Types.Header (hAuthorization)
 import Pantry
 import RIO
 import qualified RIO.List as L
@@ -18,14 +20,15 @@ uploadHackageDistro ::
        (HasLogFunc env) => Target -> Map PackageName Version -> RIO env ()
 uploadHackageDistro target packages = do
     man <- liftIO $ newManager tlsManagerSettings
-    ecreds <- tryIO $ readFileBinary "/hackage-creds"
+    let tokenfile = "/hackage-distro-token"
+    ecreds <- tryIO $ readFileBinary tokenfile
     case T.words $ decodeUtf8Lenient $ either (const mempty) id ecreds of
-        [username, password] -> do
+        [token] -> do
             logInfo $ "Uploading as Hackage distro: " <> display distroName
             res2 <- liftIO $
-              uploadDistro distroName packages (encodeUtf8 username) (encodeUtf8 password) man
+              uploadDistro distroName packages (encodeUtf8 token) man
             logInfo $ "Distro upload response: " <> displayShow res2
-        _ -> error "No Hackage creds found at /hackage-creds"
+        _ -> error $ "No Hackage token found at " ++ tokenfile
   where
     distroName :: Text
     distroName =
@@ -36,11 +39,10 @@ uploadHackageDistro target packages = do
 uploadDistro
     :: Text -- ^ distro name
     -> Map PackageName Version
-    -> ByteString -- ^ Hackage username
-    -> ByteString -- ^ Hackage password
+    -> ByteString -- ^ Hackage distro token
     -> Manager
     -> IO (Response LByteString)
-uploadDistro name packages username password manager = do
+uploadDistro name packages distrotoken manager = do
     req1 <- parseRequest $ concat
         [ "https://hackage.haskell.org/distro/"
         , T.unpack name
@@ -51,7 +53,7 @@ uploadDistro name packages username password manager = do
                 , requestBody = RequestBodyLBS csv
                 , method = "PUT"
                 }
-    httpLbs (applyBasicAuth username password req2) manager
+    httpLbs (addRequestHeader hAuthorization ("X-ApiKey " <> distrotoken) req2) manager
   where
     csv = toLazyByteString . getUtf8Builder
         $ mconcat
