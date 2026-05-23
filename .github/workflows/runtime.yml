@@ -12,26 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log into Github registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build image
-        run: docker build . -f .github/workflows/Dockerfile.runtime --tag image
-
-      - name: Push to Docker Hub
+      - name: Build artifacts
         run: |
-          echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login --username fpcojenkins --password-stdin
-          IMAGE_ID=fpco/curator
-          docker tag image $IMAGE_ID
-          docker push $IMAGE_ID
-          IMAGE_ID=$IMAGE_ID:$GITHUB_SHA
-          docker tag image $IMAGE_ID
-          docker push $IMAGE_ID
-
-      - name: Extract artifacts
-        run: |
-          mkdir -p artifacts
-          docker run -v $(pwd)/artifacts:/artifacts fpco/curator:$GITHUB_SHA bash -c 'cp -v /usr/local/bin/* /artifacts'
+          mkdir -p $(pwd)/artifacts
+          stack install --local-bin-path $(pwd)/artifacts
           bzip2 artifacts/*
 
       - name: Upload curator executable
