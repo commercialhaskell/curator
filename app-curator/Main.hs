@@ -38,7 +38,7 @@ options =
   where
     commands = do
       addCommand "update"
-                 "Update Pantry databse from Hackage"
+                 "Update Pantry database from Hackage"
                  (const update)
                  (pure ())
       addCommand "check-target-available"
