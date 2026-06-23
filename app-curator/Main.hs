@@ -8,7 +8,7 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Main where
+module Main (main) where
 
 import Curator hiding (Snapshot)
 import Data.Yaml (encodeFile, decodeFileThrow)
@@ -17,7 +17,7 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Download (download)
 import Options.Applicative.Simple hiding (action)
 import qualified Pantry
-import Path ((</>), addExtension, toFilePath, Path, Abs, File)
+import Path (addExtension, toFilePath)
 import Path.IO (doesFileExist, removeFile, resolveFile', resolveDir')
 import Paths_curator (version)
 import qualified RIO.ByteString.Lazy as BL
@@ -165,13 +165,12 @@ nightlyConstraints = do
       man <- liftIO $ newManager tlsManagerSettings
       liftIO (httpLbs req man) >>= loadStackageConstraintsBs . BL.toStrict . responseBody
 
-ltsConstraints download major minor = do
+ltsConstraints downloadConstraints major minor = do
   when (minor > 0) $ do
     verifyPreviousLtsMinorExists major minor
   let buildConstraintsName = "lts-" <> show major <> "-build-constraints.yaml"
   buildConstraintsPath <- resolveFile' buildConstraintsName
-  exists <- doesFileExist buildConstraintsPath
-  if download
+  if downloadConstraints
   then do
     logInfo $ "Downloading " <> fromString (buildConstraintsName) <> " from commercialhaskell/lts-haskell"
     req <- parseUrlThrow $ "https://raw.githubusercontent.com/commercialhaskell/lts-haskell/master/build-constraints/" <> buildConstraintsName
