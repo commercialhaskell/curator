@@ -56,6 +56,7 @@
         pkgs.haskellPackages.ghc
         pkgs.zlib
         pkgs.pkg-config
+        pkgs.cacert
       ];
     };
     devShells.x86_64-linux.default = pkgs.myHaskellPackages.shellFor {

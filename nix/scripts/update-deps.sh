@@ -57,25 +57,27 @@ echo "=== Fetching Hackage tarball and LTS and Cabal versions (parallel) ==="
 
     search_result=$(retry gh api "search/commits" \
         -X GET \
-        -f q="repo:NixOS/nixpkgs haskellPackages stackage LTS committer-date:<=$nixpkgs_date_iso" \
+        -f q="repo:NixOS/nixpkgs \"haskellPackages: stackage LTS\" committer-date:<=$nixpkgs_date_iso" \
         -f sort="committer-date" \
         -f order="desc" \
         -f per_page=1 \
-        --jq '.items[0].commit.message')
+        --jq '.items[0].commit.message | split("\n")[0]')
 
     if [[ -z "$search_result" || "$search_result" == "null" ]]; then
         echo "Error: Could not find LTS commit" >&2
         exit 1
     fi
 
-    lts_version=$(echo "$search_result" | grep -oP 'LTS \K[0-9]+\.[0-9]+' | tail -1)
+    # `|| true` prevents set -e from silently killing the subshell when
+    # grep finds no match — we want the explicit empty-check below to fire.
+    lts_version=$(echo "$search_result" | grep -oP 'LTS \K[0-9]+\.[0-9]+' | tail -1 || true)
     if [[ -z "$lts_version" ]]; then
         echo "Error: Could not parse LTS version" >&2
         exit 1
     fi
 
-    echo "$lts_version"
-) > "$lts_result" &
+    echo "$lts_version" > "$lts_result"
+) &
 lts_pid=$!
 
 # Background job: Get latest Cabal versions from Hackage
@@ -84,8 +86,8 @@ lts_pid=$!
         "https://hackage.haskell.org/package/Cabal/preferred" | jq -r '.["normal-version"][0]')
     cabal_syntax_ver=$(retry curl -sH "Accept: application/json" \
         "https://hackage.haskell.org/package/Cabal-syntax/preferred" | jq -r '.["normal-version"][0]')
-    echo "$cabal_ver $cabal_syntax_ver"
-) > "$cabal_result" &
+    echo "$cabal_ver $cabal_syntax_ver" > "$cabal_result"
+) &
 cabal_pid=$!
 
 (
