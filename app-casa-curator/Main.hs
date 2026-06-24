@@ -25,7 +25,7 @@
 
 -- | Simple tool to push all blobs from the Pantry database to Casa.
 
-module Main where
+module Main (main) where
 
 import           Casa.Client
 import           Control.Lens.TH
@@ -33,18 +33,12 @@ import           Control.Monad
 import           Control.Monad.Logger (NoLoggingT)
 import           Control.Monad.Trans.Resource
 import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Parser
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.ByteString.Short as Short
 import           Data.Conduit
 import qualified Data.Conduit.List as CL
-import           Data.Generics
-import           Data.List hiding (deleteBy)
-import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time
 import           Database.Persist
@@ -62,7 +56,6 @@ import qualified RIO.ByteString.Lazy as BL
 import qualified RIO.HashSet as HashSet
 import           RIO.Orphans
 import           RIO.Process
-import           System.Environment
 
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
@@ -277,25 +270,25 @@ main = do
   withLogFunc opts (\logFunc -> runRIO (App logFunc) runCmd)
 
 continuousPopulatePushCommand :: HasLogFunc env => ContinuousConfig -> RIO env ()
-continuousPopulatePushCommand continuousConfig = do
+continuousPopulatePushCommand cfg = do
   runSqlite
-    (continuousConfigSqliteFile continuousConfig)
+    (continuousConfigSqliteFile cfg)
     (runMigration migrateAll)
   when
-    (continuousConfigResetPull continuousConfig)
+    (continuousConfigResetPull cfg)
     (do logInfo "Resetting pull cache..."
         withContinuousProcessDb
-          (continuousConfigSqliteFile continuousConfig)
+          (continuousConfigSqliteFile cfg)
           (do deleteWhere ([] :: [Filter LastDownloaded])))
   when
-    (continuousConfigResetPush continuousConfig)
+    (continuousConfigResetPush cfg)
     (do logInfo "Resetting push cache..."
         withContinuousProcessDb
-          (continuousConfigSqliteFile continuousConfig)
+          (continuousConfigSqliteFile cfg)
           (do deleteWhere ([] :: [Filter LastPushed])))
   forever
-    (do async <- async pullAndPush
-        result <- waitCatch async
+    (do a <- async pullAndPush
+        result <- waitCatch a
         case result of
           Left err -> logError (fromString (show err))
           Right () -> pure ()
@@ -303,47 +296,47 @@ continuousPopulatePushCommand continuousConfig = do
   where
     delay = do
       logInfo
-        ("Delaying for " <> display (continuousConfigSleepFor continuousConfig) <>
+        ("Delaying for " <> display (continuousConfigSleepFor cfg) <>
          " minutes.")
       threadDelay
-        (1000 * 1000 * 60 * (continuousConfigSleepFor continuousConfig))
+        (1000 * 1000 * 60 * (continuousConfigSleepFor cfg))
     pullAndPush = do
       logInfo "Getting hackage packages ..."
-      newHackagePackages <- getNewHackagePackages continuousConfig
+      getNewHackagePackages cfg
       logInfo "Getting new snapshots ..."
-      newNames <- getNewSnapshots continuousConfig
+      newNames <- getNewSnapshots cfg
       for_
         (maybe
            id
            take
-           (continuousConfigSnapshotsLimit continuousConfig)
+           (continuousConfigSnapshotsLimit cfg)
            (toList newNames))
         (\name -> do
-           populateViaSnapshotTextName continuousConfig name
+           populateViaSnapshotTextName cfg name
            withContinuousProcessDb
-             (continuousConfigSqliteFile continuousConfig)
+             (continuousConfigSqliteFile cfg)
              (insertLoadedSnapshot name))
       logInfo "Initiating push ..."
       pushCommand
         PushConfig
           { pushConfigConcurrentDownloads =
-              continuousConfigConcurrentDownloads continuousConfig
-          , pushConfigPushUrl = continuousConfigPushUrl continuousConfig
-          , pushConfigPullUrl = continuousConfigPullUrl continuousConfig
+              continuousConfigConcurrentDownloads cfg
+          , pushConfigPushUrl = continuousConfigPushUrl cfg
+          , pushConfigPullUrl = continuousConfigPullUrl cfg
           , pushConfigMaxBlobsPerRequest =
-              continuousConfigMaxBlobsPerRequest continuousConfig
-          , configSqliteFile = continuousConfigSqliteFile continuousConfig
+              continuousConfigMaxBlobsPerRequest cfg
+          , configSqliteFile = continuousConfigSqliteFile cfg
           }
       logInfo "Push done."
 
 getNewSnapshots :: HasLogFunc env => ContinuousConfig -> RIO env (Set Text)
-getNewSnapshots continuousConfig = do
+getNewSnapshots cfg = do
   logSticky "Downloading snapshots from Stackage ..."
   availableNames <- downloadAllSnapshotTextNames
   logStickyDone "Downloaded snapshots from Stackage."
   loadedSnapshots <-
     withContinuousProcessDb
-      (continuousConfigSqliteFile continuousConfig)
+      (continuousConfigSqliteFile cfg)
       (selectList [] [])
   let loadedNames =
         Set.fromList (map (snapshotLoadedName . entityVal) loadedSnapshots)
@@ -352,25 +345,25 @@ getNewSnapshots continuousConfig = do
   pure newNames
 
 getNewHackagePackages :: HasLogFunc env => ContinuousConfig -> RIO env ()
-getNewHackagePackages continuousConfig = do
+getNewHackagePackages cfg = do
   mlastDownloadedHackageCabal :: Maybe HackageCabalId <-
     fmap
       (fmap (lastDownloadedHackageCabalId . entityVal))
       (liftIO
          (withContinuousProcessDb
-            (continuousConfigSqliteFile continuousConfig)
+            (continuousConfigSqliteFile cfg)
             (selectFirst [] [])))
   runPantryAppWith
-    (continuousConfigConcurrentDownloads continuousConfig)
-    (Left (pullUrlString (continuousConfigPullUrl continuousConfig)))
-    (continuousConfigMaxBlobsPerRequest continuousConfig)
+    (continuousConfigConcurrentDownloads cfg)
+    (Left (pullUrlString (continuousConfigPullUrl cfg)))
+    (continuousConfigMaxBlobsPerRequest cfg)
     (do logInfo "Updating Hackage index ..."
         forceUpdateHackageIndex Nothing
         logInfo "Hackage index updated."
-        count <-
+        cabalCount <-
           runPantryStorage (allHackageCabalCount mlastDownloadedHackageCabal)
         logInfo
-          ("Will download " <> display count <> " Hackage cabal revisions.")
+          ("Will download " <> display cabalCount <> " Hackage cabal revisions.")
         logInfo
           ("Pulling from database ... " <>
            (case mlastDownloadedHackageCabal of
@@ -381,14 +374,13 @@ getNewHackagePackages continuousConfig = do
           runPantryStorage
             (allHackageCabalRawPackageLocations mlastDownloadedHackageCabal)
         logInfo "Done. Loading packages ..."
-        hackageCabalIdChan <- newChan
         forM_
           (maybe
              id
              take
-             (continuousConfigHackageLimit continuousConfig)
+             (continuousConfigHackageLimit cfg)
              (zip [1 :: Int ..] (M.toList rplis)))
-          (downloadHackagePackage continuousConfig count)
+          (downloadHackagePackage cfg cabalCount)
         logStickyDone "Done downloading packages.")
 
 -- | Load a package, but make sure we haven't already done this one
@@ -410,14 +402,14 @@ downloadHackagePackage ::
   -> a1
   -> (a2, (HackageCabalId, RawPackageLocationImmutable))
   -> RIO CasaCurator ()
-downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
-  logSticky ("[" <> display i <> "/" <> display count <> "] " <> display rpli)
+downloadHackagePackage cfg cabalCount (i, (hackageCabalId, rpli)) = do
+  logSticky ("[" <> display i <> "/" <> display cabalCount <> "] " <> display rpli)
   attempt
   where
     logit :: Exception e => e -> RIO CasaCurator ()
     logit e =
       logStickyDone
-        ("[" <> display i <> "/" <> display count <> "] " <>
+        ("[" <> display i <> "/" <> display cabalCount <> "] " <>
          display (T.pack (displayException e)))
     attempt =
       catch
@@ -425,7 +417,7 @@ downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
            (void
               (do loadPackageRawDedupe rpli
                   withContinuousProcessDb
-                    (continuousConfigSqliteFile continuousConfig)
+                    (continuousConfigSqliteFile cfg)
                     (do deleteWhere ([] :: [Filter LastDownloaded])
                         insert_
                           (LastDownloaded
@@ -436,20 +428,19 @@ downloadHackagePackage continuousConfig count (i, (hackageCabalId, rpli)) = do
                in case e of
                     TreeWithoutCabalFile {} -> logit e
                     _ -> logit e))
-        (\e@(HttpExceptionRequest _ statusCodeException) ->
-           case statusCodeException of
-             ResponseTimeout -> do
-               logit e
-               logSticky "Retrying ..."
-               threadDelay (1000 * 1000)
-               attempt
-             StatusCodeException r _
-               -- FIXME: Ignoring 500s from Hackage because of
-               -- https://github.com/haskell/hackage-server/issues/1023
-               -- Also not sure about 403s. They seem suspicious. 410s seem
-               -- legit, though.
-               | getResponseStatusCode r `elem` [403, 410, 500] -> logit e
-             _ -> throwM e)
+        (\e -> case e of
+           HttpExceptionRequest _ ResponseTimeout -> do
+             logit e
+             logSticky "Retrying ..."
+             threadDelay (1000 * 1000)
+             attempt
+           HttpExceptionRequest _ (StatusCodeException r _)
+             -- FIXME: Ignoring 500s from Hackage because of
+             -- https://github.com/haskell/hackage-server/issues/1023
+             -- Also not sure about 403s. They seem suspicious. 410s seem
+             -- legit, though.
+             | getResponseStatusCode r `elem` [403, 410, 500] -> logit e
+           _ -> throwM e)
 
 -- | Record that we've populated pantry with a snapshot.
 insertLoadedSnapshot :: (MonadIO m) => Text -> ReaderT SqlBackend m ()
@@ -462,11 +453,11 @@ insertLoadedSnapshot name = do
 
 -- | Populate pantry via a text name of a snapshot.
 populateViaSnapshotTextName :: HasLogFunc env => ContinuousConfig -> Text -> RIO env ()
-populateViaSnapshotTextName continuousConfig snapshotTextName =
+populateViaSnapshotTextName cfg snapshotTextName =
   runPantryAppWith
-    (continuousConfigConcurrentDownloads continuousConfig)
-    (Left (pullUrlString (continuousConfigPullUrl continuousConfig)))
-    (continuousConfigMaxBlobsPerRequest continuousConfig)
+    (continuousConfigConcurrentDownloads cfg)
+    (Left (pullUrlString (continuousConfigPullUrl cfg)))
+    (continuousConfigMaxBlobsPerRequest cfg)
     (do let unresoledRawSnapshotLocation =
               parseRawSnapshotLocation snapshotTextName
         rawSnapshot <-
@@ -474,7 +465,7 @@ populateViaSnapshotTextName continuousConfig snapshotTextName =
         logInfo
           ("Populating from snapshot " <> display snapshotTextName <> " ...")
         populateFromRawSnapshot
-          (continuousConfigConcurrentDownloads continuousConfig)
+          (continuousConfigConcurrentDownloads cfg)
           rawSnapshot)
 
 -- | With the database used for the continous process (to remember
@@ -494,8 +485,8 @@ statusCommand =
     (Right defaultCasaRepoPrefix)
     defaultCasaMaxPerRequest
     (runPantryStorage
-       (do count <- allBlobsCount Nothing
-           lift (logInfo ("Blobs in database: " <> display count))))
+       (do blobsCount <- allBlobsCount Nothing
+           lift (logInfo ("Blobs in database: " <> display blobsCount))))
 
 -- | Populate the pantry database.
 populateCommand :: HasLogFunc env => PopulateConfig -> RIO env ()
@@ -529,12 +520,12 @@ pushCommand config = do
     (pushConfigMaxBlobsPerRequest config)
     (do blobs <-
           runPantryStorage
-            (do count <- allBlobsCount mlastPushedBlobId
+            (do blobsCount <- allBlobsCount mlastPushedBlobId
                 repoPrefix <- either throwString pure $
                               parseCasaRepoPrefix $
                               pushUrlString $
                               pushConfigPushUrl config
-                if count > 0
+                if blobsCount > 0
                   then do
                     blobsSink
                       repoPrefix
@@ -543,9 +534,9 @@ pushCommand config = do
                          (\(blobId, blob) -> do
                             liftIO (writeIORef mlastBlobIdRef (Just blobId))
                             pure blob) .|
-                       stickyProgress count)
+                       stickyProgress blobsCount)
                   else pure ()
-                pure count)
+                pure blobsCount)
         when
           (blobs == 0)
           (logInfo "There are no new blobs to push since last time."))
@@ -600,14 +591,13 @@ downloadAllSnapshotTextNames = go (1 :: Int) mempty
         let attempt =
               catch
                 (httpJSON request)
-                (\e@(HttpExceptionRequest _ statusCodeException) ->
-                   case statusCodeException of
-                     ResponseTimeout -> do
-                       logStickyDone ("Timeout: " <> fromString (show e))
-                       logSticky "Retrying ..."
-                       threadDelay (1000 * 1000)
-                       attempt
-                     _ -> throwM e)
+                (\e -> case e of
+                   HttpExceptionRequest _ ResponseTimeout -> do
+                     logStickyDone ("Timeout: " <> fromString (show e))
+                     logSticky "Retrying ..."
+                     threadDelay (1000 * 1000)
+                     attempt
+                   _ -> throwM e)
          in attempt
       case getResponseStatusCode response of
         200 ->
@@ -668,8 +658,8 @@ loadSnapshotByUnresolvedSnapshotLocation ::
   -> RIO env RawSnapshot
 loadSnapshotByUnresolvedSnapshotLocation unresoledRawSnapshotLocation = do
   rawSnapshotLocation <- resolvePaths Nothing unresoledRawSnapshotLocation
-  snapshotLocation <- completeSnapshotLocation rawSnapshotLocation
-  loadSnapshot snapshotLocation
+  snapLoc <- completeSnapshotLocation rawSnapshotLocation
+  loadSnapshot snapLoc
 
 --------------------------------------------------------------------------------
 -- Runners

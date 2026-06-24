@@ -3,19 +3,38 @@ version: 2.1.0.0
 
 ghc-options:
 - -optP-Wno-nonportable-include-path # workaround [Filename case on macOS · Issue #4739 · haskell/cabal](https://github.com/haskell/cabal/issues/4739)
+- -Werror
+- -Weverything
+# These seem genuinely useless.
+- -Wno-all-missed-specialisations
+- -Wno-missed-specialisations
+- -Wno-missing-exported-signatures
+- -Wno-missing-import-lists
+- -Wno-missing-local-signatures
+- -Wno-missing-safe-haskell-mode
+- -Wno-monomorphism-restriction
+- -Wno-safe
+- -Wno-unsafe
+- -Wno-missing-deriving-strategies
+- -Wno-missing-kind-signatures
+# Handled by fourmolu:
+- -Wno-prepositive-qualified-module
+# Some of these we do eventually want to turn on.
+- -Wno-error=unticked-promoted-constructors
+- -Wno-error=deprecations
+- -Wno-error=identities
+- -Wno-error=orphans
+- -Wno-error=redundant-constraints
+- -Wno-error=type-equality-out-of-scope
+- -Wno-error=unused-type-patterns
+# Some are too noisy even as warnings.
+- -Wno-implicit-prelude
+- -Wno-unused-do-bind
+- -Wno-missing-signatures
 
 dependencies:
 - base >=4.10 && < 5
-- http-client
-- http-client-tls
-- http-conduit
-- http-types
-- pantry
-- path
-- path-io
 - rio
-- rio-prettyprint
-- yaml
 
 default-extensions:
 - TypeOperators
@@ -31,9 +50,18 @@ library:
   - aeson
   - bytestring
   - conduit
+  - http-client
+  - http-client-tls
+  - http-conduit
+  - http-types
+  - pantry
+  - path
+  - path-io
   - process
+  - rio-prettyprint
   - tar
   - unix
+  - yaml
 
 executables:
   curator:
@@ -42,33 +70,37 @@ executables:
     main: Main.hs
     dependencies:
     - curator
+    - http-client
+    - http-client-tls
     - http-download
     - optparse-simple
+    - pantry
+    - path
+    - path-io
+    - yaml
   casa-curator:
     ghc-options: -threaded
     main: Main.hs
     source-dirs: app-casa-curator
     dependencies:
+      - aeson
       - bytestring
-      - curator
       - casa-client
       - conduit
-      - persistent
-      - rio-orphans
-      - lens
-      - resourcet
-      - optparse-applicative
-      - text
-      - optparse-simple
       - containers
-      - aeson
-      - attoparsec-aeson
+      - http-client
       - http-conduit
-      - syb
-      - persistent-sqlite
-      - persistent-template
-      - time
+      - lens
       - monad-logger
+      - optparse-applicative
+      - optparse-simple
+      - pantry
+      - persistent
+      - persistent-sqlite
+      - resourcet
+      - rio-orphans
+      - text
+      - time
 
 tests:
   spec:

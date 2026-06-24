@@ -30,11 +30,9 @@ import Distribution.Simple.Program.HcPkg (dump)
 import Distribution.System (Arch(..), OS(..))
 import qualified Distribution.Text as DT
 import qualified Distribution.Pretty
-import qualified Distribution.Types.CondTree as C
 import Distribution.Types.Dependency (depLibraries, depPkgName, depVerRange, Dependency(..))
 import Distribution.Types.ExeDependency (ExeDependency(..))
 import Distribution.Types.LibraryName (libraryNameString)
-import Distribution.Types.UnitId
 import Distribution.Types.UnqualComponentName (unqualComponentNameToPackageName)
 #if MIN_VERSION_Cabal(3,4,0)
 import Distribution.Types.Version (versionNumbers)
@@ -150,7 +148,7 @@ traverseValidate f t = do
     _ -> throwIO $ TraverseValidateExceptions errs
 
 newtype TraverseValidateExceptions = TraverseValidateExceptions [SomeException]
-  deriving (Show, Typeable)
+  deriving (Show)
 instance Exception TraverseValidateExceptions
 
 checkDependencyGraph ::
@@ -531,10 +529,7 @@ occursCheck allPackages = go
             where seen' = Set.insert pname seen
 
 data BootPackage = BootPackage
-    { bpName :: !PackageName
-    , bpVersion :: !Version
-    , bpId :: !UnitId
-    , bpDepends :: ![UnitId]
+    { bpVersion :: !Version
     }
 
 getBootPackages :: Version -> IO (Map PackageName BootPackage)
@@ -546,7 +541,7 @@ getBootPackages ghcVersion = do
       Right _ -> return ()
     let toBootPackage ipi =
           let PackageIdentifier name version = sourcePackageId ipi
-          in (name, BootPackage name version (installedUnitId ipi) (depends ipi))
+          in (name, BootPackage version)
     Map.fromList . map toBootPackage <$> dump (hcPkgInfo db) silent Nothing GlobalPackageDB
 
 -- | GHC wired-in packages, list taken from Stack.Constants

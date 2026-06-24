@@ -30,7 +30,7 @@ library
       src
   default-extensions:
       TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path
+  ghc-options: -optP-Wno-nonportable-include-path -Werror -Weverything -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-exported-signatures -Wno-missing-import-lists -Wno-missing-local-signatures -Wno-missing-safe-haskell-mode -Wno-monomorphism-restriction -Wno-safe -Wno-unsafe -Wno-missing-deriving-strategies -Wno-missing-kind-signatures -Wno-prepositive-qualified-module -Wno-error=unticked-promoted-constructors -Wno-error=deprecations -Wno-error=identities -Wno-error=orphans -Wno-error=redundant-constraints -Wno-error=type-equality-out-of-scope -Wno-error=unused-type-patterns -Wno-implicit-prelude -Wno-unused-do-bind -Wno-missing-signatures
   build-depends:
       Cabal
     , aeson
@@ -60,37 +60,28 @@ executable casa-curator
       app-casa-curator
   default-extensions:
       TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path -threaded
+  ghc-options: -optP-Wno-nonportable-include-path -Werror -Weverything -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-exported-signatures -Wno-missing-import-lists -Wno-missing-local-signatures -Wno-missing-safe-haskell-mode -Wno-monomorphism-restriction -Wno-safe -Wno-unsafe -Wno-missing-deriving-strategies -Wno-missing-kind-signatures -Wno-prepositive-qualified-module -Wno-error=unticked-promoted-constructors -Wno-error=deprecations -Wno-error=identities -Wno-error=orphans -Wno-error=redundant-constraints -Wno-error=type-equality-out-of-scope -Wno-error=unused-type-patterns -Wno-implicit-prelude -Wno-unused-do-bind -Wno-missing-signatures -threaded
   build-depends:
       aeson
-    , attoparsec-aeson
     , base >=4.10 && <5
     , bytestring
     , casa-client
     , conduit
     , containers
-    , curator
     , http-client
-    , http-client-tls
     , http-conduit
     , lens
     , monad-logger
     , optparse-applicative
     , optparse-simple
     , pantry
-    , path
-    , path-io
     , persistent
     , persistent-sqlite
-    , persistent-template
     , resourcet
     , rio
     , rio-orphans
-    , rio-prettyprint
-    , syb
     , text
     , time
-    , yaml
   default-language: Haskell2010
 
 executable curator
@@ -101,7 +92,7 @@ executable curator
       app-curator
   default-extensions:
       TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path -threaded
+  ghc-options: -optP-Wno-nonportable-include-path -Werror -Weverything -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-exported-signatures -Wno-missing-import-lists -Wno-missing-local-signatures -Wno-missing-safe-haskell-mode -Wno-monomorphism-restriction -Wno-safe -Wno-unsafe -Wno-missing-deriving-strategies -Wno-missing-kind-signatures -Wno-prepositive-qualified-module -Wno-error=unticked-promoted-constructors -Wno-error=deprecations -Wno-error=identities -Wno-error=orphans -Wno-error=redundant-constraints -Wno-error=type-equality-out-of-scope -Wno-error=unused-type-patterns -Wno-implicit-prelude -Wno-unused-do-bind -Wno-missing-signatures -threaded
   build-depends:
       base >=4.10 && <5
     , curator
@@ -113,7 +104,6 @@ executable curator
     , path
     , path-io
     , rio
-    , rio-prettyprint
     , yaml
   default-language: Haskell2010
 
@@ -128,20 +118,13 @@ test-suite spec
       test
   default-extensions:
       TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path
+  ghc-options: -optP-Wno-nonportable-include-path -Werror -Weverything -Wno-all-missed-specialisations -Wno-missed-specialisations -Wno-missing-exported-signatures -Wno-missing-import-lists -Wno-missing-local-signatures -Wno-missing-safe-haskell-mode -Wno-monomorphism-restriction -Wno-safe -Wno-unsafe -Wno-missing-deriving-strategies -Wno-missing-kind-signatures -Wno-prepositive-qualified-module -Wno-error=unticked-promoted-constructors -Wno-error=deprecations -Wno-error=identities -Wno-error=orphans -Wno-error=redundant-constraints -Wno-error=type-equality-out-of-scope -Wno-error=unused-type-patterns -Wno-implicit-prelude -Wno-unused-do-bind -Wno-missing-signatures
   build-depends:
       Cabal
     , base >=4.10 && <5
     , containers
     , curator
     , hspec
-    , http-client
-    , http-client-tls
-    , pantry
-    , path
-    , path-io
     , rio
-    , rio-prettyprint
     , text
-    , yaml
   default-language: Haskell2010

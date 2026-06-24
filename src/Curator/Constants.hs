@@ -5,8 +5,6 @@ module Curator.Constants
     , constraintsRepo
     ) where
 
-import RIO (Text, fromString)
-
 snapshotFilename :: FilePath
 snapshotFilename = "snapshot.yaml" 
 
