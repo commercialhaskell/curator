@@ -47,6 +47,7 @@ uploadDocs input' name bucket = do
     -- maybe default to --quiet or "--only-show-errors"?
     curator_AWS_OPTS <- liftIO $ fmap words $
                         getEnvDefault "CURATOR_AWS_OPTIONS" ""
+    proc "date" [] runProcess_
     logInfo "Shelling out to AWS CLI to upload docs"
     proc
       "time" -- added for https://github.com/commercialhaskell/stackage-infrastructure/issues/4
