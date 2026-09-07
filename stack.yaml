@@ -7,8 +7,8 @@ allow-newer-deps:
 
 extra-deps:
   # Needed for casa-curator, which pulls bleeding edge packages from Hackage.
-  - Cabal-3.16.1.0
-  - Cabal-syntax-3.16.1.0
+  - Cabal-3.18.1.0
+  - Cabal-syntax-3.18.1.0
 
 nix:
   shell-file: shell-stack.nix
