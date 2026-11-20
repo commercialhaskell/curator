@@ -17,15 +17,30 @@
 
     overlays.this =
       let
-        hsOverlay = pkgs: hself: hsuper: {
-          curator = hself.callPackage ./nix/packages/curator.nix {};
-          Cabal = hself.callPackage ./nix/packages/Cabal.nix {};
-          Cabal-syntax = hself.callPackage ./nix/packages/Cabal-syntax.nix {};
-          # pantry: jailbreak to allow Cabal 3.16 (has Cabal <3.15 bound),
-          # and add pkg-config for configure
-          pantry = pkgs.haskell.lib.compose.addPkgconfigDepend pkgs.zlib
-            (pkgs.haskell.lib.doJailbreak hsuper.pantry);
-        };
+        hsOverlay = pkgs: hself: hsuper:
+          let
+            # The vendored Cabal goes only to curator and the packages it is
+            # built from that depend on Cabal, which must all share one Cabal
+            # version. The rest of the set keeps nixpkgs' Cabal, and so its
+            # cache.nixos.org hashes.
+            withCuratorCabal = drv: drv.override { Cabal = hself.curatorCabal; };
+          in {
+            curatorCabal-syntax = hself.callPackage ./nix/packages/Cabal-syntax.nix {};
+            curatorCabal = hself.callPackage ./nix/packages/Cabal.nix {
+              Cabal-syntax = hself.curatorCabal-syntax;
+            };
+            curator = withCuratorCabal (hself.callPackage ./nix/packages/curator.nix {});
+            hpack = withCuratorCabal hsuper.hpack;
+            rio-prettyprint = withCuratorCabal hsuper.rio-prettyprint;
+            hackage-security = hsuper.hackage-security.override {
+              Cabal = hself.curatorCabal;
+              Cabal-syntax = hself.curatorCabal-syntax;
+            };
+            # pantry: jailbreak to allow Cabal 3.16 (has Cabal <3.15 bound),
+            # and add pkg-config for configure
+            pantry = pkgs.haskell.lib.compose.addPkgconfigDepend pkgs.zlib
+              (pkgs.haskell.lib.doJailbreak (withCuratorCabal hsuper.pantry));
+          };
       in final: prev: {
         myHaskellPackages = prev.haskellPackages.override {
           overrides = hsOverlay final;
